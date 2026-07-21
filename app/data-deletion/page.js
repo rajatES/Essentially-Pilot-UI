@@ -5,7 +5,7 @@ export const metadata = {
   description: "How to delete your data, including data obtained from Meta, from ES Posting Pilot."
 };
 
-const CONTACT = "privacy@essentiallysports.com";
+const CONTACT = "rajat@essentiallysports.com";
 
 export default function DataDeletion() {
   return (

@@ -6,7 +6,7 @@ export const metadata = {
 };
 
 const COMPANY = "EssentiallySports";
-const CONTACT = "privacy@essentiallysports.com";
+const CONTACT = "rajat@essentiallysports.com";
 
 export default function Terms() {
   return (
