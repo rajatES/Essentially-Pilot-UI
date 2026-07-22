@@ -23,7 +23,7 @@ import NotificationsBell from "@/components/common/NotificationsBell";
 import MediaLibraryView from "@/components/media/MediaLibraryView";
 import TemplatesView from "@/components/templates/TemplatesView";
 import TeamView from "@/components/team/TeamView";
-import { createBrowserSupabase } from "@/lib/supabaseBrowser";
+import { getToken, clearToken } from "@/lib/apiClient";
 import { pickImageFromGoogleDrive } from "@/lib/googleDrivePicker";
 import { useRouter } from "next/navigation";
 
@@ -201,9 +201,17 @@ export default function AppPage() {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
+  // ── auth gate ──────────────────────────────────────────────────────────────
+  // With JWT-in-localStorage there's no cookie for edge middleware to read, so
+  // the /app route is gated client-side: no token → straight to /login.
+  useEffect(() => {
+    if (!getToken()) router.replace("/login");
+  }, [router]);
+
   // ── data ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
+    if (!getToken()) return; // not logged in — the auth-gate effect redirects
     loadData();
     // Returning from the Canva OAuth redirect?
     const params = new URLSearchParams(window.location.search);
@@ -258,8 +266,7 @@ export default function AppPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function logout() {
-    const supabase = createBrowserSupabase();
-    await supabase.auth.signOut();
+    clearToken();
     router.push("/login");
     router.refresh();
   }
@@ -310,6 +317,9 @@ export default function AppPage() {
         setSelectedIds((prev) => prev.length ? prev : [data.accounts[0].id]);
       }
     } catch (err) {
+      // apiFetch clears the token on a 401 — bounce to login rather than
+      // showing a broken shell.
+      if (!getToken()) { router.replace("/login"); return; }
       showToast(err.message, "error");
     } finally {
       setLoading(false);

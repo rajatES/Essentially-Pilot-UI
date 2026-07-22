@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn, UserPlus, ShieldCheck, UserCheck } from "lucide-react";
-import { createBrowserSupabase } from "@/lib/supabaseBrowser";
-import { apiFetch } from "@/lib/apiClient";
+import { apiFetch, setToken } from "@/lib/apiClient";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,9 +38,14 @@ export default function LoginPage() {
       finalEmail = ADMIN_ACCOUNT.email;
       finalPassword = ADMIN_ACCOUNT.password;
     }
-    const supabase = createBrowserSupabase();
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email: finalEmail, password: finalPassword });
-    if (signInError) throw new Error(signInError.message);
+    const res = await apiFetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: finalEmail, password: finalPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Invalid email or password.");
+    setToken(data.token);
     router.push("/app");
     router.refresh();
   }
