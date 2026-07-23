@@ -47,8 +47,8 @@ export default function PrivacyPolicy() {
 
       <h2>4. Storage and security</h2>
       <p>
-        Data is stored in a private Supabase project (PostgreSQL and object storage) hosted on
-        infrastructure operated by Supabase and its cloud providers. Access is restricted to
+        Data is stored in a private PostgreSQL database and object storage hosted on
+        infrastructure operated by Amazon Web Services. Access is restricted to
         authorised {COMPANY} personnel. Traffic is encrypted in transit (HTTPS/TLS), and access
         tokens are stored in a database that is not publicly accessible.
       </p>
@@ -57,8 +57,7 @@ export default function PrivacyPolicy() {
       <p>We share data only with:</p>
       <ul>
         <li>the social platforms you connect, in order to publish your content and read back its status and metrics;</li>
-        <li>our infrastructure providers (Supabase for database, storage, and authentication; our application hosting provider);</li>
-        <li>Anthropic, if you use the optional AI caption assistant — in that case the caption text you submit is sent for processing;</li>
+        <li>our infrastructure providers (Amazon Web Services for hosting and media storage; our application hosting provider);</li>
         <li>authorities, where required by law.</li>
       </ul>
 

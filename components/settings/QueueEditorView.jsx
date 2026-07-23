@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Clock, Plus, X, Save, TrendingUp } from "lucide-react";
+import { Clock, Plus, X, Save } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -15,7 +15,6 @@ export default function QueueEditorView({ accounts }) {
   const [draft, setDraft] = useState([]);            // working copy [{weekday, time_of_day}]
   const [newDay, setNewDay] = useState(1);
   const [newTime, setNewTime] = useState("09:00");
-  const [suggestions, setSuggestions] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState(null);
@@ -29,17 +28,14 @@ export default function QueueEditorView({ accounts }) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Load the working copy + best-time suggestions when the account changes.
+  // Load the working copy when the account changes.
   useEffect(() => {
-    if (!selectedId) { setDraft([]); setSuggestions([]); return; }
+    if (!selectedId) { setDraft([]); return; }
     setDraft(
       slots
         .filter((s) => s.social_account_id === selectedId)
         .map((s) => ({ weekday: s.weekday, time_of_day: String(s.time_of_day).slice(0, 5) })),
     );
-    apiJson(`/api/queues/best-times?accountId=${selectedId}`)
-      .then((d) => setSuggestions(d.suggestions || []))
-      .catch(() => setSuggestions([]));
   }, [selectedId, slots]);
 
   function addSlot(weekday, time) {
@@ -156,25 +152,6 @@ export default function QueueEditorView({ accounts }) {
                   </div>
 
                   {msg && <p className={`mt-2 text-sm ${msg.type === "ok" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>{msg.text}</p>}
-                </div>
-
-                {/* Best-time suggestions */}
-                <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
-                  <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-white"><TrendingUp size={15} /> Best times (from your engagement data)</p>
-                  {suggestions.length ? (
-                    <div className="flex flex-wrap gap-2">
-                      {suggestions.map((s, i) => (
-                        <button key={i} onClick={() => addSlot(s.weekday, `${String(s.hour).padStart(2, "0")}:00`)}
-                          title="Click to add as a slot"
-                          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20">
-                          <Plus size={11} /> {WEEKDAYS[s.weekday]} {String(s.hour).padStart(2, "0")}:00
-                          <span className="text-emerald-500/70">avg {s.avgEngagement} ({s.samples} post{s.samples === 1 ? "" : "s"})</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-400 dark:text-gray-500">No engagement data yet — suggestions appear once the insights sync has run against published posts.</p>
-                  )}
                 </div>
               </>
             )}

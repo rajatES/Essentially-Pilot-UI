@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Moon, Sun, Save, Settings as SettingsIcon } from "lucide-react";
 import { apiFetch } from "@/lib/apiClient";
+import ApiKeysSection from "./ApiKeysSection";
 
 const DEFAULTS = {
   darkMode: false,
@@ -108,6 +109,9 @@ export default function SettingsView() {
             className="h-4 w-4 rounded border-slate-300 dark:border-gray-700 accent-indigo-600" />
         </Row>
       </Section>
+
+      {/* Developer API keys — admin-only (component hides itself otherwise) */}
+      <ApiKeysSection />
 
       <div className="flex items-center gap-3">
         <button onClick={save} disabled={saving} className="flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50">
