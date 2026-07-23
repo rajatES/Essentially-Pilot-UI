@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { SPORTS } from "@/lib/sports";
 import { runCompliance } from "@/lib/compliance";
-import { facebookPostUrl } from "@/lib/fbLink";
+import { externalPostUrl } from "@/lib/fbLink";
 import { apiFetch, apiJson, apiUrl } from "@/lib/apiClient";
 import { LayoutDashboard, Settings as SettingsIcon } from "lucide-react";
 import DashboardView from "@/components/dashboard/DashboardView";
@@ -340,39 +340,54 @@ export default function AppPage() {
       return;
     }
 
-    window.FB.login(
-      (response) => {
-        if (response.status !== "connected" || !response.authResponse?.accessToken) {
-          showToast("Facebook login was cancelled or denied.", "error");
-          return;
-        }
-        fetchFacebookPages(response.authResponse.accessToken);
-      },
-      {
-        // Must match the permissions submitted for App Review exactly. The
-        // instagram_* scopes are required for IG publishing/comments/insights
-        // (the linked-Page flow) — without them every IG call fails on
-        // permissions; read_insights backs the FB post-metrics sync.
-        scope: [
-          "pages_show_list",
-          "pages_read_engagement",
-          "pages_manage_posts",
-          "pages_manage_engagement",
-          "read_insights",
-          "business_management",
-          "instagram_basic",
-          "instagram_content_publish",
-          "instagram_manage_comments",
-          "instagram_manage_insights"
-        ].join(","),
-        return_scopes: true,
-        // "rerequest" forces the permission + page-selection screen every time
-        // so the "opt in to your Pages" step can't be skipped (fixes 0-pages).
-        // "reauthenticate" additionally forces the credential screen, letting
-        // the user switch to another Facebook account.
-        auth_type: switchAccount ? "reauthenticate" : "rerequest"
+    const callback = (response) => {
+      if (response.status !== "connected" || !response.authResponse?.accessToken) {
+        showToast("Facebook login was cancelled or denied.", "error");
+        return;
       }
-    );
+      fetchFacebookPages(response.authResponse.accessToken);
+    };
+
+    // Two login modes depending on how the Meta app is set up:
+    //  - "Facebook Login for Business" apps CANNOT request page-management /
+    //    IG-publish permissions via `scope` (they come back as "Invalid
+    //    Scopes"). They require a pre-built Configuration; pass its config_id.
+    //    Set NEXT_PUBLIC_FACEBOOK_CONFIG_ID to that configuration's ID.
+    //  - Classic "Facebook Login" apps use the `scope` list directly.
+    const configId = process.env.NEXT_PUBLIC_FACEBOOK_CONFIG_ID;
+    if (configId) {
+      window.FB.login(callback, {
+        config_id: configId,
+        // The configuration defines the assets/permissions; for re-selecting
+        // Pages or switching accounts we still force the auth screens.
+        auth_type: switchAccount ? "reauthenticate" : "rerequest",
+      });
+      return;
+    }
+
+    window.FB.login(callback, {
+      // Classic Facebook Login: request permissions directly. Must match the
+      // permissions the app is approved for. instagram_* back IG publishing/
+      // comments/insights; read_insights backs the FB post-metrics sync.
+      scope: [
+        "pages_show_list",
+        "pages_read_engagement",
+        "pages_manage_posts",
+        "pages_manage_engagement",
+        "read_insights",
+        "business_management",
+        "instagram_basic",
+        "instagram_content_publish",
+        "instagram_manage_comments",
+        "instagram_manage_insights",
+      ].join(","),
+      return_scopes: true,
+      // "rerequest" forces the permission + page-selection screen every time
+      // so the "opt in to your Pages" step can't be skipped (fixes 0-pages).
+      // "reauthenticate" additionally forces the credential screen, letting
+      // the user switch to another Facebook account.
+      auth_type: switchAccount ? "reauthenticate" : "rerequest",
+    });
   }
 
   async function fetchFacebookPages(shortLivedToken) {
@@ -2680,7 +2695,7 @@ export default function AppPage() {
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">Target pages</p>
                   <div className="space-y-2">
                     {(detailPost.post_targets || []).map((t) => {
-                      const url = facebookPostUrl(t.external_post_id);
+                      const url = externalPostUrl(t.social_accounts?.platform || t.platform, t.external_post_id);
                       return (
                         <div key={t.id} className="flex items-center gap-2 rounded-lg border border-slate-100 dark:border-gray-800 p-2.5">
                           <PlatformIcon platform={t.social_accounts?.platform || t.platform} size={15} />
