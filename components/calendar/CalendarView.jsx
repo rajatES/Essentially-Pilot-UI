@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, ImagePlus, Plus } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import { STATUS_STYLES, statusLabel, fmt, PLATFORM_META } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
-import { usePostsData, usePostsInvalidate } from "@/lib/queries";
+import { usePostsData, usePostsInvalidate, useOptimisticPosts } from "@/lib/queries";
 
 // Statuses that may be dragged to a new date (backend rejects sent/publishing).
 const DRAGGABLE = new Set(["draft", "scheduled", "pending_review", "approved", "rejected", "failed"]);
@@ -17,6 +17,7 @@ const STATUS_FILTERS = ["scheduled", "draft", "pending_review", "sent", "failed"
 export default function CalendarView({ onOpenPost, onCompose }) {
   const showToast = useToast();
   const invalidatePosts = usePostsInvalidate();
+  const optimisticPosts = useOptimisticPosts();
   const { data } = usePostsData();
   const allPosts = useMemo(() => data?.posts || [], [data]);
   const accounts = useMemo(() => data?.accounts || [], [data]);
@@ -114,14 +115,20 @@ export default function CalendarView({ onOpenPost, onCompose }) {
       return;
     }
 
+    // Move the chip to the new day immediately; restore on failure.
+    const nextIso = next.toISOString();
+    const rollback = optimisticPosts((list) =>
+      list.map((p) => (p.id === postId ? { ...p, scheduled_for: nextIso } : p)),
+    );
     try {
       const r = await apiJson(`/api/posts/${postId}`, {
         method: "PATCH",
-        body: JSON.stringify({ scheduledFor: next.toISOString() }),
+        body: JSON.stringify({ scheduledFor: nextIso }),
       });
-      showToast(r.warning ? `Rescheduled — Facebook note: ${r.warning}` : `Rescheduled to ${fmt(next.toISOString())}.`, r.warning ? "warn" : "ok");
+      showToast(r.warning ? `Rescheduled — Facebook note: ${r.warning}` : `Rescheduled to ${fmt(nextIso)}.`, r.warning ? "warn" : "ok");
       invalidatePosts();
     } catch (err) {
+      rollback();
       showToast(err.message, "error");
     }
   }

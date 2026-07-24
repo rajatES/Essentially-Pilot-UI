@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Facebook, Filter, Link as LinkIcon, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
-import { SPORTS } from "@/lib/sports";
+import { Facebook, Filter, Link as LinkIcon, Plus, RefreshCw, Search, Tag, Trash2, X } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
-import { usePostsData, usePostsInvalidate } from "@/lib/queries";
+import { usePostsData, usePostsInvalidate, useSports } from "@/lib/queries";
 import ConnectAccountsView from "@/components/settings/ConnectAccountsView";
+import ManageSportsModal from "@/components/accounts/ManageSportsModal";
 
 // Accounts hub (Manage + Connect tabs), extracted from app/app/page.js.
 // The Facebook JS-SDK connect flow stays in the shell (it owns the SDK and
@@ -16,7 +16,9 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
   const showToast = useToast();
   const invalidatePosts = usePostsInvalidate();
   const { data } = usePostsData();
+  const { data: sportsData } = useSports();
   const accounts = useMemo(() => data?.accounts || [], [data]);
+  const isAdmin = me?.role === "admin";
 
   const [accountsTab, setAccountsTab] = useState("manage"); // "connect" | "manage"
   const [acctSearch, setAcctSearch] = useState("");
@@ -24,6 +26,22 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
   const [acctPlatform, setAcctPlatform] = useState("all");
   const [selectedAccts, setSelectedAccts] = useState([]);
   const [syncing, setSyncing] = useState(false);
+  const [showManageSports, setShowManageSports] = useState(false);
+
+  // Assignable sports = the managed taxonomy plus any category actually in use
+  // (so a page never points at an option that isn't listed), with "Other" last.
+  const sportOptions = useMemo(() => {
+    const managed = (sportsData?.sports || []).map((s) => s.name);
+    const seen = new Set();
+    const list = [];
+    for (const s of [...managed, ...accounts.map((a) => a.category || "Other")]) {
+      if (!s || s === "Other" || seen.has(s)) continue;
+      seen.add(s);
+      list.push(s);
+    }
+    list.push("Other");
+    return list;
+  }, [sportsData, accounts]);
 
   // ── mutations ────────────────────────────────────────────────────────────
 
@@ -193,6 +211,14 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
           >
             <Plus size={15} /> Create Post
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowManageSports(true)}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-gray-200 hover:bg-slate-50 dark:hover:bg-gray-800/50"
+            >
+              <Tag size={15} /> Manage sports
+            </button>
+          )}
           {accounts.length > 0 && (
             <button
               onClick={() => syncAccounts(null)}
@@ -326,7 +352,7 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                 className="rounded-lg border border-slate-200 dark:border-gray-800 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500"
               >
                 <option value="all">All sports ({accounts.length})</option>
-                {SPORTS.filter((s) => sportCounts[s]).map((s) => (
+                {sportOptions.filter((s) => sportCounts[s]).map((s) => (
                   <option key={s} value={s}>{s} ({sportCounts[s]})</option>
                 ))}
               </select>
@@ -343,7 +369,7 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                   <select onChange={(e) => { if (e.target.value) { bulkAccount("category", e.target.value); e.target.value = ""; } }}
                     className="rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-gray-900 px-2 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 outline-none" defaultValue="">
                     <option value="" disabled>Set sport…</option>
-                    {SPORTS.map((s) => <option key={s} value={s}>{s}</option>)}
+                    {sportOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                   <button onClick={() => bulkAccount("disconnect")} className="rounded-lg border border-red-200 dark:border-red-500/30 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10">Disconnect</button>
                 </>
@@ -408,7 +434,7 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                           className="rounded-lg border border-slate-200 dark:border-gray-800 px-2 py-1 text-xs outline-none focus:border-indigo-500"
                           title="Change sport"
                         >
-                          {SPORTS.map((s) => <option key={s} value={s}>{s}</option>)}
+                          {sportOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       ) : (
                         <span className="rounded-full bg-slate-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-medium text-slate-500 dark:text-gray-400">{account.category || "Other"}</span>
@@ -433,6 +459,8 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
       )}
       </div>
       )}
+
+      {showManageSports && <ManageSportsModal onClose={() => setShowManageSports(false)} />}
     </div>
   );
 }

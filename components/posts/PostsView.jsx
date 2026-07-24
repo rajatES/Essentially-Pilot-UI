@@ -5,9 +5,10 @@ import { FileText, LayoutList, Search, Users, X } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import { PLATFORM_META } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
-import { usePostsData, usePostsInvalidate } from "@/lib/queries";
+import { usePostsData, usePostsInvalidate, useOptimisticPosts } from "@/lib/queries";
 import PostCard from "./PostCard";
 import CsvImportModal from "./CsvImportModal";
+import { PostListSkeleton } from "@/components/common/Skeleton";
 
 // SocialPilot-style Manage Posts: status tabs + combined filters.
 const TABS = [
@@ -21,6 +22,7 @@ const TABS = [
 export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
   const showToast = useToast();
   const invalidatePosts = usePostsInvalidate();
+  const optimisticPosts = useOptimisticPosts();
   const { data, isLoading } = usePostsData();
   const posts = useMemo(() => data?.posts || [], [data]);
   const authors = data?.authors || [];
@@ -43,11 +45,14 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
 
   async function deletePost(id) {
     if (!confirm("Delete this post?")) return;
+    // Remove the card immediately; restore it if the server rejects.
+    const rollback = optimisticPosts((list) => list.filter((p) => p.id !== id));
     try {
       await apiJson(`/api/posts/${id}`, { method: "DELETE" });
       showToast("Post deleted.");
       invalidatePosts();
     } catch (err) {
+      rollback();
       showToast(err.message, "error");
     }
   }
@@ -204,7 +209,7 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
 
       {/* List */}
       {isLoading ? (
-        <p className="text-center text-sm text-slate-500 dark:text-gray-400 py-16">Loading…</p>
+        <PostListSkeleton />
       ) : posts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 py-16 text-center">
           <LayoutList size={32} className="mx-auto text-slate-300 dark:text-gray-600 mb-3" />

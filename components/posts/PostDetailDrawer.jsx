@@ -22,6 +22,7 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, onClo
   const invalidatePosts = usePostsInvalidate();
   const [post, setPost] = useState(initialPost);
   const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false); // guards approve/reject/submit/save from double-fire
   const [editDraft, setEditDraft] = useState({ body: "", linkUrl: "", scheduledFor: "" });
 
   function startEdit() {
@@ -51,6 +52,8 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, onClo
 
   // Approve / reject / (re)submit a post in the review workflow.
   async function reviewPost(action) {
+    if (busy) return;
+    setBusy(true);
     try {
       const r = await apiJson("/api/approvals", { method: "POST", body: JSON.stringify({ postId: post.id, action, reviewer: me?.display_name || "You" }) });
       setPost(r.post);
@@ -65,6 +68,8 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, onClo
       invalidatePosts();
     } catch (e) {
       showToast(e.message, "error");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -209,12 +214,12 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, onClo
                   <p className="mb-2 text-xs font-semibold text-amber-800 dark:text-amber-300">Pending review — won't go out until approved</p>
                   {canReview ? (
                     <div className="flex gap-2">
-                      <button onClick={() => reviewPost("approve")}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-700">
+                      <button onClick={() => reviewPost("approve")} disabled={busy}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50">
                         <CheckCircle2 size={14} /> Approve &amp; publish
                       </button>
-                      <button onClick={() => reviewPost("reject")}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10">
+                      <button onClick={() => reviewPost("reject")} disabled={busy}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50">
                         <XCircle size={14} /> Reject
                       </button>
                     </div>

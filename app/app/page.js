@@ -10,6 +10,7 @@ import { apiFetch, apiJson, getToken, clearToken } from "@/lib/apiClient";
 import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
 import { usePostsData, usePostsInvalidate } from "@/lib/queries";
 import ToastProvider, { useToast } from "@/components/common/ToastProvider";
+import TopProgressBar from "@/components/common/TopProgressBar";
 import DashboardView from "@/components/dashboard/DashboardView";
 import SettingsView, { applyDarkMode } from "@/components/settings/SettingsView";
 import QueueEditorView from "@/components/settings/QueueEditorView";
@@ -309,6 +310,7 @@ function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f8f9fa] dark:bg-gray-950 transition-colors">
+      <TopProgressBar />
 
       {/* ── Sidebar ── */}
       <aside className="flex w-56 flex-col border-r border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 transition-colors">

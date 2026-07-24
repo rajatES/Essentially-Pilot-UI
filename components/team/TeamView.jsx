@@ -2,8 +2,9 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Users, UserPlus, Trash2, ShieldCheck, X, UserCheck, UserX, BarChart3 } from "lucide-react";
+import { Users, UserPlus, Trash2, ShieldCheck, X, UserCheck, UserX, BarChart3, Layers } from "lucide-react";
 import TeamStatsView from "@/components/team/TeamStatsView";
+import DivisionsView from "@/components/team/DivisionsView";
 import { apiJson as jsonFetch } from "@/lib/apiClient";
 
 export default function TeamView() {
@@ -93,12 +94,17 @@ export default function TeamView() {
           className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${tab === "roster" ? "border-indigo-600 text-indigo-700 dark:border-indigo-400 dark:text-indigo-400" : "border-transparent text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"}`}>
           Roster
         </button>
+        <button onClick={() => setTab("divisions")}
+          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${tab === "divisions" ? "border-indigo-600 text-indigo-700 dark:border-indigo-400 dark:text-indigo-400" : "border-transparent text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"}`}>
+          <Layers size={14} /> Divisions
+        </button>
         <button onClick={() => setTab("stats")}
           className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${tab === "stats" ? "border-indigo-600 text-indigo-700 dark:border-indigo-400 dark:text-indigo-400" : "border-transparent text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"}`}>
           <BarChart3 size={14} /> Stats
         </button>
       </div>
 
+      {tab === "divisions" && <DivisionsView isAdmin={isAdmin} />}
       {tab === "stats" && <TeamStatsView />}
 
       {tab === "roster" && isAdmin && pending.length > 0 && (

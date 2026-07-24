@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FolderOpen, ImagePlus, Link as LinkIcon, X } from "lucide-react";
-import { apiFetch, apiJson, apiUrl } from "@/lib/apiClient";
+import { apiFetch, apiJson, apiUrl, uploadWithProgress } from "@/lib/apiClient";
 import { useToast } from "@/components/common/ToastProvider";
 import { pickImageFromGoogleDrive } from "@/lib/googleDrivePicker";
 import MediaLibraryView from "@/components/media/MediaLibraryView";
@@ -17,6 +17,7 @@ function guessMediaType(nameOrUrl) {
 export default function MediaPanel({ media, onChange, meId }) {
   const showToast = useToast();
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(null); // { name, pct } while a file uploads
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");
   const [showLibrary, setShowLibrary] = useState(false);
@@ -30,17 +31,17 @@ export default function MediaPanel({ media, onChange, meId }) {
     setUploading(true);
     try {
       for (const f of Array.from(files)) {
+        setProgress({ name: f.name, pct: 0 });
         const fd = new FormData();
         fd.append("file", f);
-        const res = await apiFetch("/api/upload", { method: "POST", body: fd });
-        const up = await res.json();
-        if (!res.ok) throw new Error(up.error || "Media upload failed.");
+        const up = await uploadWithProgress("/api/upload", fd, (pct) => setProgress({ name: f.name, pct }));
         onChange((prev) => [...prev, { url: up.url, type: f.type?.startsWith("video") ? "video" : "image", name: f.name }]);
       }
     } catch (e) {
       showToast(e.message, "error");
     } finally {
       setUploading(false);
+      setProgress(null);
     }
   }
 
@@ -119,9 +120,19 @@ export default function MediaPanel({ media, onChange, meId }) {
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadFiles(e.dataTransfer.files); }}
     >
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
-        Media {uploading && <span className="ml-2 normal-case text-indigo-500">uploading…</span>}
-      </p>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">Media</p>
+
+      {progress && (
+        <div className="mb-2 rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/10 p-2">
+          <div className="mb-1 flex items-center justify-between text-xs font-medium text-indigo-700 dark:text-indigo-300">
+            <span className="truncate pr-2">Uploading {progress.name}</span>
+            <span className="shrink-0">{progress.pct}%</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-indigo-100 dark:bg-indigo-500/20">
+            <div className="h-full rounded-full bg-indigo-500 transition-[width] duration-200 ease-out" style={{ width: `${progress.pct}%` }} />
+          </div>
+        </div>
+      )}
 
       {media.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
