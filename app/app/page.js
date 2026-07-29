@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Send, Calendar, Users, Plus, RefreshCw, Clock, X, LayoutList,
   Search, FileText, Image as ImageIcon, LogOut,
-  CheckCircle2, LayoutDashboard, Settings as SettingsIcon
+  CheckCircle2, LayoutDashboard, Settings as SettingsIcon,
+  TrendingUp, Palette, Webhook, BarChart3
 } from "lucide-react";
 import { apiFetch, apiJson, getToken, clearToken } from "@/lib/apiClient";
 import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
@@ -18,6 +19,10 @@ import GlobalSearch from "@/components/common/GlobalSearch";
 import NotificationsBell from "@/components/common/NotificationsBell";
 import MediaLibraryView from "@/components/media/MediaLibraryView";
 import TemplatesView from "@/components/templates/TemplatesView";
+import DesignTemplatesView from "@/components/design-templates/DesignTemplatesView";
+import PerformanceView from "@/components/performance/PerformanceView";
+import PostAnalyticsView from "@/components/post-analytics/PostAnalyticsView";
+import ApiActivityView from "@/components/api-activity/ApiActivityView";
 import TeamView from "@/components/team/TeamView";
 import PostsView from "@/components/posts/PostsView";
 import PostDetailDrawer from "@/components/posts/PostDetailDrawer";
@@ -30,12 +35,16 @@ const NAV = [
   { id: "dashboard", label: "Dashboard",  icon: LayoutDashboard },
   { id: "compose",   label: "Create Post", icon: Plus },
   { id: "queue",     label: "Posts",       icon: LayoutList },
+  { id: "performance", label: "Performance", icon: TrendingUp },
+  { id: "postAnalytics", label: "Post Analytics", icon: BarChart3 },
   { id: "calendar",  label: "Calendar",    icon: Calendar },
   { id: "queues",    label: "Posting Queue", icon: Clock },
   { id: "media",     label: "Media",       icon: ImageIcon },
   { id: "templates", label: "Templates",   icon: FileText },
+  { id: "designTemplates", label: "Design Templates", icon: Palette },
   { id: "accounts",  label: "Accounts",    icon: Users },
   { id: "team",      label: "Team",        icon: Users },
+  { id: "apiActivity", label: "API Activity", icon: Webhook, adminOnly: true },
   { id: "settings",  label: "Settings",    icon: SettingsIcon }
 ];
 
@@ -325,7 +334,7 @@ function AppShell() {
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {NAV.map(({ id, label, icon: Icon }) => {
+          {NAV.filter((n) => !n.adminOnly || me?.role === "admin").map(({ id, label, icon: Icon }) => {
             const isActive = view === id;
             return (
               <button
@@ -393,6 +402,10 @@ function AppShell() {
           {view === "media" && <MediaLibraryView />}
           {view === "queues" && <QueueEditorView accounts={accounts} />}
           {view === "team" && <TeamView />}
+          {view === "performance" && <PerformanceView />}
+          {view === "postAnalytics" && <PostAnalyticsView />}
+          {view === "apiActivity" && <ApiActivityView onOpenPost={setDetailPost} onCompose={openCompose} />}
+          {view === "designTemplates" && <DesignTemplatesView />}
 
           {view === "templates" && (
             <TemplatesView onUse={(t) => openCompose({ templateText: t.content || "", templateId: t.id })} />
@@ -548,6 +561,7 @@ function AppShell() {
           key={detailPost.id}
           post={detailPost}
           authors={postsData?.authors || []}
+          apiKeys={postsData?.apiKeys || []}
           me={me}
           onClose={() => setDetailPost(null)}
         />

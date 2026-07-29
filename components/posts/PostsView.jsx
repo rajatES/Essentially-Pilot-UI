@@ -27,11 +27,13 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
   const posts = useMemo(() => data?.posts || [], [data]);
   const authors = data?.authors || [];
   const accounts = useMemo(() => data?.accounts || [], [data]);
+  const apiKeyMap = useMemo(() => Object.fromEntries((data?.apiKeys || []).map((k) => [k.id, k])), [data]);
 
   const [tab, setTab] = useState("queued");
   const [authorFilter, setAuthorFilter] = useState("all");
   const [accountFilter, setAccountFilter] = useState("all");
   const [platformFilter, setPlatformFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -98,13 +100,14 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
       const targets = p.post_targets || [];
       if (accountFilter !== "all" && !targets.some((t) => t.social_account_id === accountFilter)) return false;
       if (platformFilter !== "all" && !targets.some((t) => (t.social_accounts?.platform || t.platform) === platformFilter)) return false;
+      if (sourceFilter !== "all" && (p.source || "app") !== sourceFilter) return false;
       if (q && !(p.body || "").toLowerCase().includes(q)) return false;
       const when = new Date(p.scheduled_for);
       if (dateFrom && when < new Date(`${dateFrom}T00:00:00`)) return false;
       if (dateTo && when > new Date(`${dateTo}T23:59:59`)) return false;
       return true;
     });
-  }, [posts, authorFilter, accountFilter, platformFilter, search, dateFrom, dateTo]);
+  }, [posts, authorFilter, accountFilter, platformFilter, sourceFilter, search, dateFrom, dateTo]);
 
   const tabCounts = useMemo(() => {
     const counts = {};
@@ -166,6 +169,14 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
           <option value="all">All platforms</option>
           {platformsInUse.map((p) => <option key={p} value={p}>{PLATFORM_META[p]?.label || p}</option>)}
         </select>
+        <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} title="How the post was created"
+          className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-slate-600 dark:text-gray-300 outline-none">
+          <option value="all">Any source</option>
+          <option value="app">App</option>
+          <option value="api">API</option>
+          <option value="csv">CSV import</option>
+          <option value="recycle">Recycled</option>
+        </select>
         {authors.length > 0 && (
           <div className="flex items-center gap-1.5">
             <Users size={13} className="text-slate-400 dark:text-gray-500" />
@@ -181,9 +192,9 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
           className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-slate-600 dark:text-gray-300 outline-none" />
         <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="To date"
           className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-slate-600 dark:text-gray-300 outline-none" />
-        {(search || accountFilter !== "all" || platformFilter !== "all" || authorFilter !== "all" || dateFrom || dateTo) && (
+        {(search || accountFilter !== "all" || platformFilter !== "all" || authorFilter !== "all" || sourceFilter !== "all" || dateFrom || dateTo) && (
           <button
-            onClick={() => { setSearch(""); setAccountFilter("all"); setPlatformFilter("all"); setAuthorFilter("all"); setDateFrom(""); setDateTo(""); }}
+            onClick={() => { setSearch(""); setAccountFilter("all"); setPlatformFilter("all"); setAuthorFilter("all"); setSourceFilter("all"); setDateFrom(""); setDateTo(""); }}
             className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
           >
             Clear filters
@@ -229,6 +240,7 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
               key={post.id}
               post={post}
               author={authorMap[post.created_by]}
+              apiKeyName={post.source === "api" ? apiKeyMap[post.api_key_id]?.name : undefined}
               onDelete={deletePost}
               onOpen={() => onOpenPost(post)}
               onDuplicate={() => onCompose({ post })}

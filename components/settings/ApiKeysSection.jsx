@@ -9,6 +9,7 @@ import { apiJson } from "@/lib/apiClient";
 // only the prefix is shown. Keys authenticate the external /api/v1/* surface.
 export default function ApiKeysSection() {
   const [keys, setKeys] = useState(null); // null = loading or not allowed
+  const [usageById, setUsageById] = useState({}); // keyId → { total, lastPostAt, ... }
   const [allowed, setAllowed] = useState(true);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -19,8 +20,13 @@ export default function ApiKeysSection() {
 
   async function refresh() {
     try {
-      const d = await apiJson("/api/api-keys");
+      // Key rows + per-key usage rollups (posts created via this key).
+      const [d, u] = await Promise.all([
+        apiJson("/api/api-keys"),
+        apiJson("/api/api-keys/usage").catch(() => ({ usage: [] })),
+      ]);
       setKeys(d.keys || []);
+      setUsageById(Object.fromEntries((u.usage || []).map((x) => [x.id, x])));
       setAllowed(true);
     } catch {
       // 403 for non-admins — hide the whole section.
@@ -158,6 +164,10 @@ export default function ApiKeysSection() {
                   </p>
                   <p className="text-xs text-slate-400 dark:text-gray-500">
                     <code>{k.key_prefix}</code> · created {fmt(k.created_at)} · last used {fmt(k.last_used_at)}
+                  </p>
+                  <p className="text-xs font-medium text-slate-500 dark:text-gray-400">
+                    {(usageById[k.id]?.total ?? 0)} post{(usageById[k.id]?.total ?? 0) === 1 ? "" : "s"} created
+                    {usageById[k.id]?.lastPostAt ? ` · last ${fmt(usageById[k.id].lastPostAt)}` : ""}
                   </p>
                 </div>
                 {!k.revoked_at &&

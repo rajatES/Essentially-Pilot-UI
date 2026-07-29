@@ -118,13 +118,18 @@ function ScheduleTimePicker({ scheduledFor, onChange }) {
 
   const handleDateChange = (e) => {
     const newDate = e.target.value;
-    // If switching to today and current time is in the past, pick first valid slot
+    if (!newDate) { onChange(""); return; }
     const isNewToday = newDate === todayStr;
+    // Valid slots for the chosen date (today is limited to future times).
+    const daySlots = isNewToday ? allSlots.filter((s) => s >= minTime) : allSlots;
     let newTime = sfTime;
-    if (isNewToday && sfTime < minTime) {
-      newTime = slots[0] || minTime;
+    // No time chosen yet, or the existing time isn't valid for today → default to
+    // a sensible slot (from ~9 AM) instead of clearing the whole selection. This
+    // lets the user pick any date directly without first selecting today.
+    if (!newTime || (isNewToday && newTime < minTime)) {
+      newTime = daySlots.find((s) => s >= "09:00") || daySlots[0] || minTime;
     }
-    onChange(newDate && newTime ? `${newDate}T${newTime}` : "");
+    onChange(`${newDate}T${newTime}`);
   };
 
   const fmtSlot = (t) => {

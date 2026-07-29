@@ -1,13 +1,15 @@
 "use client";
 
 import { Clock, Copy, ExternalLink, Trash2, XCircle } from "lucide-react";
-import { STATUS_STYLES, statusLabel, fmt, PlatformIcon } from "@/lib/platformMeta";
+import { STATUS_STYLES, statusLabel, fmt, PlatformIcon, sourceBadge } from "@/lib/platformMeta";
 
 // One post row in the Posts list. Extracted from app/app/page.js; target
 // chips now show the real platform icon (was hardcoded to Facebook).
-export default function PostCard({ post, author, onDelete, onOpen, onDuplicate, selected, onToggleSelect }) {
+// `apiKeyName` (optional) labels the API badge with the creating key.
+export default function PostCard({ post, author, onDelete, onOpen, onDuplicate, selected, onToggleSelect, apiKeyName }) {
   const targets = post.post_targets || [];
   const canDelete = post.status === "scheduled" || post.status === "failed";
+  const srcBadge = sourceBadge(post.source);
 
   return (
     <article className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
@@ -33,6 +35,11 @@ export default function PostCard({ post, author, onDelete, onOpen, onDuplicate, 
             {author && (
               <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-400">
                 {author.display_name}
+              </span>
+            )}
+            {srcBadge && (
+              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${srcBadge.cls}`}>
+                {srcBadge.label}{post.source === "api" && apiKeyName ? ` · ${apiKeyName}` : ""}
               </span>
             )}
             {["reel", "story"].includes(post.platform_options?.facebook?.format) && (

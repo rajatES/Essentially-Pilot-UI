@@ -1,12 +1,30 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, Clock, ExternalLink, Pencil, ShieldCheck, Trash2, X, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, CheckCircle2, Clock, ExternalLink, FileText, History, Pencil, RefreshCw, ShieldCheck, Trash2, Webhook, X, XCircle } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import { externalPostUrl } from "@/lib/fbLink";
 import { STATUS_STYLES, statusLabel, fmt, PlatformIcon } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
 import { usePostsInvalidate } from "@/lib/queries";
+
+// Live "auto-approves in …" countdown for a pending post with a deadline.
+function AutoApproveCountdown({ at }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const ms = new Date(at).getTime() - now;
+  if (ms <= 0) return <p className="text-xs text-amber-700 dark:text-amber-300">Auto-approving shortly…</p>;
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  const s = Math.floor((ms % 60000) / 1000);
+  const label = h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
+  return <p className="text-xs text-amber-700 dark:text-amber-300">⏱ Auto-approves in {label} unless reviewed first.</p>;
+}
 
 function toLocalInput(iso) {
   const d = new Date(iso);
@@ -17,13 +35,23 @@ function toLocalInput(iso) {
 // Post detail drawer (view + edit + approval actions), extracted from
 // app/app/page.js. `post` is the row to show; owns its own edit state and
 // mutations, refreshing the shared ["posts"] cache afterwards.
-export default function PostDetailDrawer({ post: initialPost, authors, me, onClose }) {
+export default function PostDetailDrawer({ post: initialPost, authors, me, apiKeys = [], onClose }) {
   const showToast = useToast();
   const invalidatePosts = usePostsInvalidate();
+  const qc = useQueryClient();
   const [post, setPost] = useState(initialPost);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false); // guards approve/reject/submit/save from double-fire
   const [editDraft, setEditDraft] = useState({ body: "", linkUrl: "", scheduledFor: "" });
+  const [reviewComment, setReviewComment] = useState("");
+
+  // Approval audit trail for this post (who submitted/approved/rejected + notes).
+  const { data: historyData } = useQuery({
+    queryKey: ["approvals", post.id],
+    queryFn: () => apiJson(`/api/approvals?postId=${post.id}`),
+    enabled: !!post.id,
+  });
+  const history = historyData?.approvals || [];
 
   function startEdit() {
     setEditDraft({
@@ -51,20 +79,36 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, onClo
   }
 
   // Approve / reject / (re)submit a post in the review workflow.
-  async function reviewPost(action) {
+  // `override` forces past a fact-check block/flag ("Approve anyway").
+  async function reviewPost(action, override = false) {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await apiJson("/api/approvals", { method: "POST", body: JSON.stringify({ postId: post.id, action, reviewer: me?.display_name || "You" }) });
+      const r = await apiJson("/api/approvals", {
+        method: "POST",
+        body: JSON.stringify({
+          postId: post.id,
+          action,
+          override,
+          comment: reviewComment.trim() || null,
+          reviewer: me?.display_name || "You",
+        }),
+      });
       setPost(r.post);
+      setReviewComment("");
       if (action === "approve") {
-        const ok = r.post.status === "sent" || r.post.status === "scheduled";
-        showToast(r.warning ? `Approved — ${r.warning}` : ok ? `Approved and ${r.post.status === "sent" ? "published" : "scheduled"}.` : "Approved, but it failed on every page — check Posts for details.", ok && !r.warning ? "ok" : "warn");
+        if (r.held) {
+          showToast(`Held by fact-check (${r.factCheck?.action}) — review the note, then Approve anyway if it's fine.`, "warn");
+        } else {
+          const ok = r.post.status === "sent" || r.post.status === "scheduled";
+          showToast(r.warning ? `Approved — ${r.warning}` : ok ? `Approved and ${r.post.status === "sent" ? "published" : "scheduled"}.` : "Approved, but it failed on every page — check Posts for details.", ok && !r.warning ? "ok" : "warn");
+        }
       } else if (action === "reject") {
         showToast("Post rejected.", "warn");
       } else {
         showToast("Submitted for review.");
       }
+      qc.invalidateQueries({ queryKey: ["approvals", post.id] });
       invalidatePosts();
     } catch (e) {
       showToast(e.message, "error");
@@ -163,6 +207,38 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, onClo
               )}
             </div>
 
+            {/* How this post was created — API (with the key), CSV, or recycle.
+                "app" posts show nothing (the default, unremarkable case). */}
+            {(() => {
+              const src = post.source || "app";
+              if (src === "app") return null;
+              if (src === "api") {
+                const key = apiKeys.find((k) => k.id === post.api_key_id);
+                return (
+                  <div className="flex items-start gap-2 rounded-lg border border-violet-200 dark:border-violet-500/30 bg-violet-50 dark:bg-violet-500/10 p-2.5 text-xs text-violet-700 dark:text-violet-300">
+                    <Webhook size={14} className="mt-0.5 shrink-0" />
+                    <span>
+                      Created via the <strong>Developer API</strong>
+                      {key ? (
+                        <> · key <strong>{key.name}</strong> <code className="text-[11px]">{key.key_prefix}</code>{key.revoked_at ? " (revoked)" : ""}</>
+                      ) : post.api_key_id ? (
+                        <> · key removed</>
+                      ) : null}
+                    </span>
+                  </div>
+                );
+              }
+              const meta = src === "csv"
+                ? { Icon: FileText, label: "Imported from a CSV upload" }
+                : { Icon: RefreshCw, label: "Recycled from another post" };
+              const Icon = meta.Icon;
+              return (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-gray-800 bg-slate-50 dark:bg-gray-800/40 p-2.5 text-xs text-slate-600 dark:text-gray-300">
+                  <Icon size={14} className="shrink-0" /> {meta.label}
+                </div>
+              );
+            })()}
+
             {post.image_url && (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={post.image_url} alt="" className="w-full rounded-lg border border-slate-200 dark:border-gray-800 object-cover" />
@@ -209,22 +285,45 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, onClo
             {post.status === "pending_review" && (() => {
               const authorDivisionId = authors.find((a) => a.id === post.created_by)?.division_id;
               const canReview = me?.role === "admin" || (me?.is_group_head && authorDivisionId && authorDivisionId === me?.division_id);
+              const fc = post.fact_check;
+              const flagged = fc && (fc.action === "block" || fc.action === "flag") && !fc.overridden;
               return (
-                <div className="rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3">
-                  <p className="mb-2 text-xs font-semibold text-amber-800 dark:text-amber-300">Pending review — won't go out until approved</p>
-                  {canReview ? (
-                    <div className="flex gap-2">
-                      <button onClick={() => reviewPost("approve")} disabled={busy}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-3 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50">
-                        <CheckCircle2 size={14} /> Approve &amp; publish
-                      </button>
-                      <button onClick={() => reviewPost("reject")} disabled={busy}
-                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50">
-                        <XCircle size={14} /> Reject
-                      </button>
+                <div className="rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Pending review — won&apos;t go out until approved</p>
+                  {post.auto_approve_at && <AutoApproveCountdown at={post.auto_approve_at} />}
+
+                  {flagged && (
+                    <div className={`flex items-start gap-2 rounded-lg border p-2.5 text-xs ${fc.action === "block" ? "border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300" : "border-orange-300 dark:border-orange-500/40 bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-300"}`}>
+                      <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                      <span>
+                        <strong>{fc.action === "block" ? "Fact-check blocked" : "Fact-check flagged"}:</strong> {fc.reason || "needs a human review."}
+                      </span>
                     </div>
+                  )}
+
+                  {canReview ? (
+                    <>
+                      <textarea
+                        value={reviewComment}
+                        onChange={(e) => setReviewComment(e.target.value)}
+                        rows={2}
+                        placeholder="Feedback (optional) — saved to the approval history"
+                        className="w-full resize-none rounded-lg border border-amber-200 dark:border-amber-500/30 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500"
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={() => reviewPost("approve", flagged)} disabled={busy}
+                          className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 ${flagged ? "bg-orange-600 hover:bg-orange-700" : "bg-teal-600 hover:bg-teal-700"}`}>
+                          <CheckCircle2 size={14} /> {flagged ? "Approve anyway" : "Approve & publish"}
+                        </button>
+                        <button onClick={() => reviewPost("reject")} disabled={busy}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50">
+                          <XCircle size={14} /> Reject
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">Tip: use <strong>Edit</strong> (top-right) to tweak the caption before approving.</p>
+                    </>
                   ) : (
-                    <p className="text-xs text-amber-700 dark:text-amber-300">Only an admin or this post's division Group Head can approve/reject it.</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-300">Only an admin or this post&apos;s division Group Head can approve/reject it.</p>
                   )}
                 </div>
               );
@@ -235,6 +334,25 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, onClo
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20">
                 <ShieldCheck size={14} /> {post.status === "rejected" ? "Resubmit for review" : "Submit for review"}
               </button>
+            )}
+
+            {history.length > 0 && (
+              <div>
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
+                  <History size={12} /> Approval history
+                </p>
+                <div className="space-y-1.5">
+                  {history.map((h) => (
+                    <div key={h.id} className="rounded-lg border border-slate-100 dark:border-gray-800 px-2.5 py-1.5">
+                      <p className="text-xs text-slate-600 dark:text-gray-300">
+                        <span className="font-semibold capitalize text-slate-800 dark:text-white">{h.action}</span>
+                        {h.reviewer ? ` by ${h.reviewer}` : ""} · {fmt(h.created_at)}
+                      </p>
+                      {h.comment && <p className="mt-0.5 text-xs italic text-slate-500 dark:text-gray-400">“{h.comment}”</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             {(post.status === "scheduled" || post.status === "failed" || post.status === "draft" || post.status === "rejected" || post.status === "approved" || post.status === "pending_review") && (

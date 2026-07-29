@@ -12,7 +12,9 @@ const DEFAULTS = {
   defaultFirstComment: "",
   defaultLinkInFirstComment: false,
   utmTracking: false,
-  autoRecycle: false
+  autoRecycle: false,
+  autoApprove: false,
+  autoApproveHours: 24
 };
 
 export function applyDarkMode(on) {
@@ -108,6 +110,17 @@ export default function SettingsView() {
           <input type="checkbox" checked={settings.autoRecycle} onChange={(e) => update("autoRecycle", e.target.checked)}
             className="h-4 w-4 rounded border-slate-300 dark:border-gray-700 accent-indigo-600" />
         </Row>
+        <Row label="Auto-approve pending posts" desc="Posts submitted for review are auto-approved after a delay unless a reviewer acts first (fact-check blocks are never auto-approved). Runs via the auto-approve cron.">
+          <input type="checkbox" checked={settings.autoApprove} onChange={(e) => update("autoApprove", e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 dark:border-gray-700 accent-indigo-600" />
+        </Row>
+        {settings.autoApprove && (
+          <Row label="Auto-approve delay (hours)" desc="How long a post waits for a human reviewer before it auto-approves">
+            <input type="number" min="1" value={settings.autoApproveHours}
+              onChange={(e) => update("autoApproveHours", Number(e.target.value) || 24)}
+              className="w-20 rounded-lg border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm outline-none focus:border-indigo-500" />
+          </Row>
+        )}
       </Section>
 
       {/* Developer API keys — admin-only (component hides itself otherwise) */}
