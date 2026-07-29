@@ -146,7 +146,10 @@ export default function PostAnalyticsView() {
   async function refreshInsights() {
     setRefreshing(true);
     try {
-      const r = await apiJson("/api/insights/refresh", { method: "POST", body: JSON.stringify({}) });
+      // Refresh the same window the table is showing, so older posts get their
+      // metrics pulled too (not just the last 30 days).
+      const rangeBody = preset === "custom" ? { start, end } : { days: Number(preset) };
+      const r = await apiJson("/api/insights/refresh", { method: "POST", body: JSON.stringify(rangeBody) });
       qc.invalidateQueries({ queryKey: ["post-analytics"] });
       showToast(`Refreshed ${r.synced} post target(s)${r.failed ? `, ${r.failed} failed` : ""}.`, r.failed ? "warn" : "ok");
     } catch (e) {
