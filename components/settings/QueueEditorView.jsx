@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Clock, Plus, X, Save } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
+import AccountAvatar from "@/components/common/AccountAvatar";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -90,8 +91,7 @@ export default function QueueEditorView({ accounts }) {
                       : "text-slate-600 hover:bg-slate-50 dark:text-gray-300 dark:hover:bg-gray-800"
                   }`}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {a.avatar_url ? <img src={a.avatar_url} alt="" className="h-6 w-6 rounded-full" /> : <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 dark:bg-gray-700 text-[10px]">{a.display_name?.[0]}</span>}
+                  <AccountAvatar account={a} size={24} />
                   <span className="min-w-0 flex-1 truncate">{a.display_name}</span>
                   <span className="shrink-0 text-xs text-slate-400 dark:text-gray-500">{slotCountFor(a.id)}</span>
                 </button>

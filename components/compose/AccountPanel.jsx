@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Search, X } from "lucide-react";
 import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
+import AccountAvatar from "@/components/common/AccountAvatar";
 
 // LEFT panel of the SocialPilot-style composer: searchable account list
 // grouped by platform, with per-group select-all and collapsible sections.
@@ -124,14 +125,7 @@ export default function AccountPanel({ accounts, selectedIds, onChange, onNaviga
                     className="h-4 w-4 rounded border-slate-300 dark:border-gray-700 accent-indigo-600"
                   />
                   <div className="relative shrink-0">
-                    {account.avatar_url ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={account.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" />
-                    ) : (
-                      <div className={`flex h-7 w-7 items-center justify-center rounded-full ${meta?.bg || "bg-indigo-100 dark:bg-indigo-500/20"}`}>
-                        <PlatformIcon platform={account.platform} size={13} />
-                      </div>
-                    )}
+                    <AccountAvatar account={account} size={28} />
                     <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white dark:bg-gray-900 ring-1 ring-slate-200 dark:ring-gray-700">
                       <PlatformIcon platform={account.platform} size={8} />
                     </span>
