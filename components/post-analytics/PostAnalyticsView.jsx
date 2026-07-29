@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  BarChart3, Table2, LayoutGrid, Download, RefreshCw, Columns3, Search, X,
+  BarChart3, Table2, LayoutGrid, Download, RefreshCw, DownloadCloud, Columns3, Search, X,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Info, MoreHorizontal,
   ExternalLink, Image as ImageIcon, Video, Link2, FileText,
 } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import { usePostAnalytics, usePostsData } from "@/lib/queries";
-import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
+import { PLATFORM_META, PlatformIcon, sourceBadge } from "@/lib/platformMeta";
 import { externalPostUrl } from "@/lib/fbLink";
 import { useToast } from "@/components/common/ToastProvider";
 import {
@@ -48,10 +48,12 @@ export default function PostAnalyticsView() {
   const [pageFilter, setPageFilter] = useState([]); // accountIds
   const [platformFilter, setPlatformFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [originFilter, setOriginFilter] = useState("all"); // all | app | organic
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ key: "datePublished", dir: "desc" });
   const [page, setPage] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [showCustomise, setShowCustomise] = useState(false);
   const [pageDropdownOpen, setPageDropdownOpen] = useState(false);
   const [pageSearch, setPageSearch] = useState("");
@@ -85,7 +87,7 @@ export default function PostAnalyticsView() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  useEffect(() => { setPage(1); }, [pageFilter, platformFilter, typeFilter, search, sort, viewMode, preset, start, end]);
+  useEffect(() => { setPage(1); }, [pageFilter, platformFilter, typeFilter, originFilter, search, sort, viewMode, preset, start, end]);
 
   function handlePreset(v) {
     setPreset(v);
@@ -113,6 +115,7 @@ export default function PostAnalyticsView() {
       if (pageSet.size && !pageSet.has(r.accountId)) return false;
       if (platformFilter !== "all" && r.platform !== platformFilter) return false;
       if (typeFilter !== "all" && r.postType !== typeFilter) return false;
+      if (originFilter !== "all" && (r.origin || "app") !== originFilter) return false;
       if (q && !(r.title || "").toLowerCase().includes(q)) return false;
       return true;
     });
@@ -125,7 +128,7 @@ export default function PostAnalyticsView() {
       if (av > bv) return 1 * dir;
       return 0;
     });
-  }, [rows, pageFilter, platformFilter, typeFilter, search, sort]);
+  }, [rows, pageFilter, platformFilter, typeFilter, originFilter, search, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const startIdx = (page - 1) * perPage;
@@ -140,7 +143,23 @@ export default function PostAnalyticsView() {
     setPageFilter((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
   function clearFilters() {
-    setPageFilter([]); setPlatformFilter("all"); setTypeFilter("all"); setSearch("");
+    setPageFilter([]); setPlatformFilter("all"); setTypeFilter("all"); setOriginFilter("all"); setSearch("");
+  }
+
+  // Pull ALL posts (organic + app) from connected FB/IG pages into the DB, then
+  // reload. Admin-only server-side — a non-admin gets a clear error toast.
+  async function syncFromPlatforms() {
+    setSyncing(true);
+    try {
+      const body = preset === "custom" ? { start, end } : { days: Number(preset) };
+      const r = await apiJson("/api/insights/sync", { method: "POST", body: JSON.stringify(body) });
+      qc.invalidateQueries({ queryKey: ["post-analytics"] });
+      showToast(`Synced ${r.synced} post(s) from ${r.accounts} page(s)${r.failed ? `, ${r.failed} failed` : ""}.`, r.failed ? "warn" : "ok");
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   async function refreshInsights() {
@@ -192,7 +211,7 @@ export default function PostAnalyticsView() {
     URL.revokeObjectURL(url);
   }
 
-  const activeFilters = pageFilter.length || platformFilter !== "all" || typeFilter !== "all" || search;
+  const activeFilters = pageFilter.length || platformFilter !== "all" || typeFilter !== "all" || originFilter !== "all" || search;
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-4">
@@ -219,7 +238,12 @@ export default function PostAnalyticsView() {
                 className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-2 text-sm text-slate-700 dark:text-gray-200 outline-none" />
             </>
           )}
-          <button onClick={refreshInsights} disabled={refreshing}
+          <button onClick={syncFromPlatforms} disabled={syncing}
+            title="Pull ALL posts (organic + app-made) from your connected Facebook / Instagram pages"
+            className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-slate-700 dark:text-gray-200 hover:bg-slate-50 dark:hover:bg-gray-800/50 disabled:opacity-50">
+            <DownloadCloud size={15} className={syncing ? "animate-pulse" : ""} /> {syncing ? "Syncing…" : "Sync"}
+          </button>
+          <button onClick={refreshInsights} disabled={refreshing} title="Re-pull metrics for posts already in the table"
             className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
             <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} /> Refresh
           </button>
@@ -279,6 +303,13 @@ export default function PostAnalyticsView() {
         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
           className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm text-slate-700 dark:text-gray-200 outline-none">
           {TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+
+        <select value={originFilter} onChange={(e) => setOriginFilter(e.target.value)} title="Posted via this app vs. directly on the platform"
+          className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm text-slate-700 dark:text-gray-200 outline-none">
+          <option value="all">App + Organic</option>
+          <option value="app">App-made</option>
+          <option value="organic">Organic</option>
         </select>
 
         <div className="flex min-w-[160px] flex-1 items-center gap-2 rounded-lg border border-slate-200 dark:border-gray-800 px-2.5 py-1.5">
@@ -443,7 +474,12 @@ function TitleCell({ row }) {
           <TIcon size={12} className="shrink-0" />
           <span>{contentLabel(row)}</span>
           <span className="text-slate-300 dark:text-gray-600">·</span>
-          <span className="max-w-[140px] truncate">{row.page}</span>
+          <span className="max-w-[120px] truncate">{row.page}</span>
+          {row.origin === "organic" ? (
+            <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-gray-800 dark:text-gray-400">Organic</span>
+          ) : sourceBadge(row.source) ? (
+            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${sourceBadge(row.source).cls}`}>{sourceBadge(row.source).label}</span>
+          ) : null}
         </p>
       </div>
       <RowActions row={row} url={url} />
