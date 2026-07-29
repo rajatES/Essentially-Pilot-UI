@@ -108,11 +108,23 @@ function ScheduleTimePicker({ scheduledFor, onChange }) {
     }
   }
 
-  // If today selected, only show future slots (>= now + 5 min)
+  // If today is selected, only offer slots far enough ahead to actually
+  // schedule. The backend publishes immediately for anything within ~10 min
+  // (Facebook's native scheduler needs the lead time), so the earliest slot
+  // must clear that window — otherwise "Schedule" silently posts now.
   const isToday = sfDate === todayStr;
   const minTime = (() => {
-    const cutoff = new Date(now.getTime() + 5 * 60000);
-    return `${String(cutoff.getHours()).padStart(2, "0")}:${String(Math.ceil(cutoff.getMinutes() / 30) * 30 === 60 ? 0 : Math.ceil(cutoff.getMinutes() / 30) * 30).padStart(2, "0")}`;
+    // 15 min of lead (comfortably past the 10-min instant-publish window),
+    // rounded UP to the next 5-min slot. A Date object handles hour/day
+    // rollover correctly — the old manual math wrapped to :00 of the SAME
+    // hour, exposing past slots and causing scheduled posts to go out now.
+    const cutoff = new Date(now.getTime() + 15 * 60000);
+    cutoff.setSeconds(0, 0);
+    const rem = cutoff.getMinutes() % 5;
+    if (rem) cutoff.setMinutes(cutoff.getMinutes() + (5 - rem));
+    // Rolled past midnight → nothing left today; force picking another day.
+    if (cutoff.toDateString() !== now.toDateString()) return "24:00";
+    return `${String(cutoff.getHours()).padStart(2, "0")}:${String(cutoff.getMinutes()).padStart(2, "0")}`;
   })();
   const slots = isToday ? allSlots.filter((s) => s >= minTime) : allSlots;
 
