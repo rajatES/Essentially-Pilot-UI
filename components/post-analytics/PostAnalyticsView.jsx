@@ -17,7 +17,9 @@ import {
 } from "@/lib/postAnalyticsColumns";
 import CustomiseColumnsModal from "./CustomiseColumnsModal";
 
-const LS_KEY = "pp.postAnalytics.columns.v1";
+// Bumped to v2 when video metrics joined the default column set — a one-time
+// reset so existing users pick up Watch time / Avg play / 3-sec views.
+const LS_KEY = "pp.postAnalytics.columns.v2";
 const DATE_PRESETS = [["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 3 months"], ["custom", "Custom range"]];
 const TYPE_OPTIONS = [["all", "All types"], ["video", "Video"], ["photo", "Photo"], ["link", "Link"], ["text", "Text only"]];
 
@@ -548,6 +550,7 @@ function PostGrid({ rows }) {
       {rows.map((r) => {
         const m = r.metrics || {};
         const url = r.externalPostId ? externalPostUrl(r.platform, r.externalPostId) : null;
+        const isVideo = r.postType === "video" || r.platformOptions?.[r.platform]?.format === "reel";
         return (
           <div key={r.rowId}
             className="flex flex-col overflow-hidden rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:border-slate-300 dark:hover:border-gray-700">
@@ -569,9 +572,16 @@ function PostGrid({ rows }) {
             </div>
             <div className="grid grid-cols-3 gap-px bg-slate-100 dark:bg-gray-800 text-center">
               <Stat label="Reach" value={m.reach} />
-              <Stat label="Views" value={m.views} />
+              <Stat label={isVideo ? "Video views" : "Views"} value={m.views} />
               <Stat label="Interactions" value={m.interactions} />
             </div>
+            {isVideo && (
+              <div className="grid grid-cols-3 gap-px border-t border-slate-100 dark:border-gray-800 bg-slate-100 dark:bg-gray-800 text-center">
+                <StatText label="Watch time" value={formatCell("duration", m.watchTime)} />
+                <StatText label="Avg play" value={formatCell("durationAvg", m.avgPlayTime)} />
+                <StatText label="3-sec views" value={compactNum(m.threeSecondViews)} />
+              </div>
+            )}
             <div className="flex items-center justify-between px-3 py-2 text-[11px] text-slate-500 dark:text-gray-400">
               <span>{contentLabel(r)}</span>
               <span className="flex items-center gap-2">
@@ -593,6 +603,16 @@ function Stat({ label, value }) {
   return (
     <div className="bg-white dark:bg-gray-900 py-2">
       <p className="text-sm font-bold text-slate-800 dark:text-white">{v ?? "—"}</p>
+      <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-gray-500">{label}</p>
+    </div>
+  );
+}
+
+// Like Stat but for an already-formatted string (durations, etc.).
+function StatText({ label, value }) {
+  return (
+    <div className="bg-white dark:bg-gray-900 py-2">
+      <p className="text-sm font-bold text-slate-800 dark:text-white">{value ?? "—"}</p>
       <p className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-gray-500">{label}</p>
     </div>
   );
