@@ -1,15 +1,19 @@
 "use client";
 
 import { Heart, MessageCircle, Play, Repeat2, Send } from "lucide-react";
+import AccountAvatar from "@/components/common/AccountAvatar";
 
 function Avatar({ account, size = 34 }) {
-  return account?.avatar_url ? (
-    /* eslint-disable-next-line @next/next/no-img-element */
-    <img src={account.avatar_url} alt="" style={{ width: size, height: size }} className="rounded-full object-cover" />
-  ) : (
-    <div style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-slate-800 dark:bg-gray-200 text-xs font-bold text-white dark:text-gray-900">
-      {account?.display_name?.[0] || "T"}
-    </div>
+  return (
+    <AccountAvatar
+      account={account}
+      size={size}
+      fallback={
+        <div style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-slate-800 dark:bg-gray-200 text-xs font-bold text-white dark:text-gray-900">
+          {account?.display_name?.[0] || "T"}
+        </div>
+      }
+    />
   );
 }
 

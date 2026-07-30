@@ -17,6 +17,7 @@ import SettingsView, { applyDarkMode } from "@/components/settings/SettingsView"
 import QueueEditorView from "@/components/settings/QueueEditorView";
 import GlobalSearch from "@/components/common/GlobalSearch";
 import NotificationsBell from "@/components/common/NotificationsBell";
+import AccountAvatar from "@/components/common/AccountAvatar";
 import MediaLibraryView from "@/components/media/MediaLibraryView";
 import TemplatesView from "@/components/templates/TemplatesView";
 import DesignTemplatesView from "@/components/design-templates/DesignTemplatesView";
@@ -514,14 +515,10 @@ function AppShell() {
                       className="h-4 w-4 rounded border-slate-300 dark:border-gray-700 accent-indigo-600"
                     />
                     <div className="relative">
-                      {page.picture ? (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img src={page.picture} alt="" className="h-9 w-9 rounded-full object-cover" />
-                      ) : (
-                        <div className={`flex h-9 w-9 items-center justify-center rounded-full ${PLATFORM_META[page.platform]?.bg || "bg-indigo-100 dark:bg-indigo-500/20"}`}>
-                          <PlatformIcon platform={page.platform} size={16} />
-                        </div>
-                      )}
+                      <AccountAvatar
+                        account={{ platform: page.platform, external_account_id: page.id, avatar_url: page.picture }}
+                        size={36}
+                      />
                       <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-white dark:bg-gray-900 ring-1 ring-slate-200 dark:ring-gray-700">
                         <PlatformIcon platform={page.platform} size={9} />
                       </span>

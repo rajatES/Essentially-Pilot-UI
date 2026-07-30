@@ -1,6 +1,7 @@
 "use client";
 
 import { BarChart2, Heart, MessageCircle, Play, Repeat2, Share } from "lucide-react";
+import AccountAvatar from "@/components/common/AccountAvatar";
 
 // Basic X (Twitter) post preview.
 export default function XPreview({ account, caption, media }) {
@@ -10,12 +11,14 @@ export default function XPreview({ account, caption, media }) {
   return (
     <div className="rounded-xl border border-slate-200 dark:border-gray-700 bg-white dark:bg-black p-3 shadow-sm">
       <div className="flex gap-2.5">
-        {account?.avatar_url ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={account.avatar_url} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
-        ) : (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 dark:bg-gray-100 text-sm font-bold text-white dark:text-gray-900">{name[0]}</div>
-        )}
+        <AccountAvatar
+          account={account}
+          size={40}
+          className="shrink-0"
+          fallback={
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 dark:bg-gray-100 text-sm font-bold text-white dark:text-gray-900">{name[0]}</div>
+          }
+        />
         <div className="min-w-0 flex-1">
           <p className="text-[14px]">
             <span className="font-bold text-slate-900 dark:text-gray-100">{name}</span>

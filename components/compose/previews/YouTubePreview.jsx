@@ -1,6 +1,7 @@
 "use client";
 
 import { Play } from "lucide-react";
+import AccountAvatar from "@/components/common/AccountAvatar";
 
 // YouTube video-card preview: 16:9 thumbnail, title (custom or first caption
 // line), channel identity, and the chosen privacy badge.
@@ -30,12 +31,14 @@ export default function YouTubePreview({ account, caption, media, options }) {
         <span className="absolute bottom-1.5 right-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">0:00</span>
       </div>
       <div className="flex gap-2.5 p-3">
-        {account?.avatar_url ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={account.avatar_url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
-        ) : (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-sm font-bold text-white">{channel[0]}</div>
-        )}
+        <AccountAvatar
+          account={account}
+          size={36}
+          className="shrink-0"
+          fallback={
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-sm font-bold text-white">{channel[0]}</div>
+          }
+        />
         <div className="min-w-0">
           <p className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900 dark:text-gray-100">
             {title || <span className="italic text-slate-300 dark:text-gray-600">Video title from the first caption line…</span>}

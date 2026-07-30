@@ -1,15 +1,19 @@
 "use client";
 
 import { Bookmark, Heart, MessageCircle, MoreHorizontal, Play, Send } from "lucide-react";
+import AccountAvatar from "@/components/common/AccountAvatar";
 
 function Avatar({ account, size = 30 }) {
-  return account?.avatar_url ? (
-    /* eslint-disable-next-line @next/next/no-img-element */
-    <img src={account.avatar_url} alt="" style={{ width: size, height: size }} className="rounded-full object-cover" />
-  ) : (
-    <div style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 text-xs font-bold text-white">
-      {account?.display_name?.[0] || "I"}
-    </div>
+  return (
+    <AccountAvatar
+      account={account}
+      size={size}
+      fallback={
+        <div style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600 text-xs font-bold text-white">
+          {account?.display_name?.[0] || "I"}
+        </div>
+      }
+    />
   );
 }
 

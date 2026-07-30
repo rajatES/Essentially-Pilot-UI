@@ -8,6 +8,7 @@ import { useToast } from "@/components/common/ToastProvider";
 import { usePostsData, usePostsInvalidate, useSports } from "@/lib/queries";
 import ConnectAccountsView from "@/components/settings/ConnectAccountsView";
 import ManageSportsModal from "@/components/accounts/ManageSportsModal";
+import AccountAvatar from "@/components/common/AccountAvatar";
 
 // Accounts hub (Manage + Connect tabs), extracted from app/app/page.js.
 // The Facebook JS-SDK connect flow stays in the shell (it owns the SDK and
@@ -404,14 +405,7 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                         className="h-4 w-4 rounded border-slate-300 dark:border-gray-700 accent-indigo-600"
                       />
                       <div className="relative">
-                        {account.avatar_url ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img src={account.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover" />
-                        ) : (
-                          <div className={`flex h-9 w-9 items-center justify-center rounded-full ${PLATFORM_META[account.platform]?.bg || "bg-indigo-100 dark:bg-indigo-500/20"}`}>
-                            <PlatformIcon platform={account.platform} size={16} />
-                          </div>
-                        )}
+                        <AccountAvatar account={account} size={36} />
                         <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-white dark:bg-gray-900 ring-1 ring-slate-200 dark:ring-gray-700">
                           <PlatformIcon platform={account.platform} size={9} />
                         </span>

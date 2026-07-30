@@ -2,19 +2,23 @@
 
 import { useState } from "react";
 import { Globe, MessageCircle, MoreHorizontal, Play, Share2, ThumbsUp } from "lucide-react";
+import AccountAvatar from "@/components/common/AccountAvatar";
 
 function domainOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, "").toUpperCase(); } catch { return ""; }
 }
 
 function Avatar({ account, size = 40 }) {
-  return account?.avatar_url ? (
-    /* eslint-disable-next-line @next/next/no-img-element */
-    <img src={account.avatar_url} alt="" style={{ width: size, height: size }} className="rounded-full object-cover" />
-  ) : (
-    <div style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-      {account?.display_name?.[0] || "P"}
-    </div>
+  return (
+    <AccountAvatar
+      account={account}
+      size={size}
+      fallback={
+        <div style={{ width: size, height: size }} className="flex items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+          {account?.display_name?.[0] || "P"}
+        </div>
+      }
+    />
   );
 }
 
