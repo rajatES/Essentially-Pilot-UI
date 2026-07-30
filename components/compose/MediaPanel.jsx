@@ -11,6 +11,11 @@ function guessMediaType(nameOrUrl) {
   return /\.(mp4|mov|m4v|webm|avi)(\?|#|$)/i.test(nameOrUrl || "") ? "video" : "image";
 }
 
+function formatBytes(n) {
+  if (!n && n !== 0) return "";
+  return n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
+}
+
 // Media space of the composer: Upload / Library / URL / Google Drive / Canva
 // sources plus drag-and-drop. All files upload to S3 immediately and land in
 // the shared `media` array ([{url, type, name?}], first item = thumbnail).
@@ -36,6 +41,14 @@ export default function MediaPanel({ media, onChange, meId }) {
         fd.append("file", f);
         const up = await uploadWithProgress("/api/upload", fd, (pct) => setProgress({ name: f.name, pct }));
         onChange((prev) => [...prev, { url: up.url, type: f.type?.startsWith("video") ? "video" : "image", name: f.name }]);
+        // Server auto-downscales oversized images so platforms (esp. Facebook)
+        // don't reject them — tell the user it happened.
+        if (up.optimized) {
+          showToast(
+            `“${f.name}” was large (${formatBytes(up.originalSizeBytes)}) and was optimized to ${formatBytes(up.sizeBytes)} to fit the social platforms' limits.`,
+            "warn",
+          );
+        }
       }
     } catch (e) {
       showToast(e.message, "error");

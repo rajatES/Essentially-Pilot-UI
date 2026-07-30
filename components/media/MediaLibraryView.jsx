@@ -4,6 +4,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Image as ImageIcon, Upload, Star, Trash2, FolderPlus, Folder, X } from "lucide-react";
 import { apiFetch, apiJson as jsonFetch } from "@/lib/apiClient";
+import { useToast } from "@/components/common/ToastProvider";
+
+function formatBytes(n) {
+  if (!n && n !== 0) return "";
+  return n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
+}
 
 // Registers an already-uploaded file (via /api/upload) into the media_assets library.
 async function registerAsset(uploaded, folderId) {
@@ -24,6 +30,7 @@ async function registerAsset(uploaded, folderId) {
 
 export default function MediaLibraryView({ onPick }) {
   const qc = useQueryClient();
+  const showToast = useToast();
   const [folderId, setFolderId] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -58,6 +65,12 @@ export default function MediaLibraryView({ onPick }) {
       if (!uploadRes.ok) throw new Error(uploaded.error || "Upload failed.");
       await registerAsset(uploaded, folderId);
       qc.invalidateQueries({ queryKey: ["media-assets"] });
+      if (uploaded.optimized) {
+        showToast(
+          `“${file.name}” was large (${formatBytes(uploaded.originalSizeBytes)}) and was optimized to ${formatBytes(uploaded.sizeBytes)} to fit the social platforms' limits.`,
+          "warn",
+        );
+      }
     } catch (err) {
       alert(err.message);
     } finally {
