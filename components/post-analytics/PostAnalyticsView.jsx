@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3, Table2, LayoutGrid, Download, RefreshCw, DownloadCloud, Columns3, Search, X,
@@ -400,15 +401,18 @@ const TYPE_ICON = { video: Video, photo: ImageIcon, link: Link2, text: FileText 
 function PostTable({ rows, cols, sort, onSort }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
-      <div className="overflow-x-auto">
+      {/* Single scroll region (both axes) with a sticky header + sticky first
+          column, so the horizontal scrollbar stays reachable without scrolling
+          to the bottom of a tall table (Meta Business Suite style). */}
+      <div className="max-h-[70vh] overflow-auto">
         <table className="w-full border-separate border-spacing-0 text-left text-sm">
           <thead className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400">
             <tr>
-              <th className="sticky left-0 z-20 min-w-[460px] border-b border-r border-slate-200 bg-slate-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800">
+              <th className="sticky left-0 top-0 z-30 min-w-[460px] border-b border-r border-slate-200 bg-slate-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800">
                 Title
               </th>
               {cols.map((c) => (
-                <th key={c.key} className={`whitespace-nowrap border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800 ${alignCls(c.align)}`}>
+                <th key={c.key} className={`sticky top-0 z-20 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-800 ${alignCls(c.align)}`}>
                   <button onClick={() => onSort(c.key)}
                     className={`inline-flex items-center gap-1 hover:text-slate-700 dark:hover:text-gray-200 ${c.align === "right" ? "flex-row-reverse" : ""}`}>
                     <span>{c.label}</span>
@@ -531,13 +535,16 @@ function RowActions({ row, url }) {
         className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
         <MoreHorizontal size={15} />
       </button>
-      {menu && (
+      {/* Portaled to <body> so it escapes the sticky cell's stacking context —
+          otherwise a later row's sticky column paints over it. */}
+      {menu && typeof document !== "undefined" && createPortal(
         <div style={{ position: "fixed", top: menu.y, left: menu.x - 176, zIndex: 60 }}
           onMouseDown={(e) => e.stopPropagation()}
           className="w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-gray-800 dark:bg-gray-900">
           <button onClick={() => copy(row.title)} className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 dark:text-gray-200 dark:hover:bg-gray-800">Copy caption</button>
           <button onClick={() => copy(row.externalPostId)} className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 dark:text-gray-200 dark:hover:bg-gray-800">Copy post ID</button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
