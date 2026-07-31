@@ -5,11 +5,11 @@ import {
   Send, Calendar, Users, Plus, RefreshCw, Clock, X, LayoutList,
   Search, FileText, Image as ImageIcon, LogOut,
   CheckCircle2, LayoutDashboard, Settings as SettingsIcon,
-  TrendingUp, Palette, Webhook, BarChart3
+  TrendingUp, Palette, Webhook, BarChart3, ShieldCheck
 } from "lucide-react";
 import { apiFetch, apiJson, getToken, clearToken } from "@/lib/apiClient";
 import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
-import { usePostsData, usePostsInvalidate } from "@/lib/queries";
+import { usePostsData, usePostsInvalidate, usePendingApprovals } from "@/lib/queries";
 import ToastProvider, { useToast } from "@/components/common/ToastProvider";
 import TopProgressBar from "@/components/common/TopProgressBar";
 import DashboardView from "@/components/dashboard/DashboardView";
@@ -26,6 +26,7 @@ import PostAnalyticsView from "@/components/post-analytics/PostAnalyticsView";
 import ApiActivityView from "@/components/api-activity/ApiActivityView";
 import TeamView from "@/components/team/TeamView";
 import PostsView from "@/components/posts/PostsView";
+import ApprovalsView from "@/components/approvals/ApprovalsView";
 import PostDetailDrawer from "@/components/posts/PostDetailDrawer";
 import CalendarView from "@/components/calendar/CalendarView";
 import AccountsView from "@/components/accounts/AccountsView";
@@ -36,6 +37,7 @@ const NAV = [
   { id: "dashboard", label: "Dashboard",  icon: LayoutDashboard },
   { id: "compose",   label: "Create Post", icon: Plus },
   { id: "queue",     label: "Posts",       icon: LayoutList },
+  { id: "approvals", label: "Approvals",   icon: ShieldCheck },
   { id: "performance", label: "Performance", icon: TrendingUp },
   { id: "postAnalytics", label: "Post Analytics", icon: BarChart3 },
   { id: "calendar",  label: "Calendar",    icon: Calendar },
@@ -67,6 +69,8 @@ function AppShell() {
   const invalidatePosts = usePostsInvalidate();
   const { data: postsData } = usePostsData();
   const accounts = useMemo(() => postsData?.accounts || [], [postsData]);
+  const { data: pendingData } = usePendingApprovals();
+  const pendingCount = pendingData?.items?.length || 0;
 
   const [me, setMe] = useState(null);
   const [view, setView] = useState("dashboard");
@@ -348,7 +352,10 @@ function AppShell() {
                 }`}
               >
                 <Icon size={18} className="min-w-[18px]" />
-                {label}
+                <span className="flex-1 text-left">{label}</span>
+                {id === "approvals" && pendingCount > 0 && (
+                  <span className="shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{pendingCount}</span>
+                )}
               </button>
             );
           })}
@@ -413,6 +420,7 @@ function AppShell() {
           )}
 
           {view === "queue" && <PostsView onOpenPost={setDetailPost} onNavigate={setView} onCompose={openCompose} />}
+          {view === "approvals" && <ApprovalsView me={me} />}
           {view === "calendar" && <CalendarView onOpenPost={setDetailPost} onCompose={openCompose} />}
 
           {view === "accounts" && (
