@@ -163,7 +163,7 @@ function ScheduleTimePicker({ scheduledFor, onChange }) {
           min={todayStr}
           max={maxDateStr}
           onChange={handleDateChange}
-          className="flex-1 rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500"
+          className="flex-1 rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 dark:[color-scheme:dark]"
           required
         />
         <select
@@ -171,7 +171,7 @@ function ScheduleTimePicker({ scheduledFor, onChange }) {
           onChange={(e) => onChange(sfDate ? `${sfDate}T${e.target.value}` : "")}
           disabled={!sfDate}
           size={1}
-          className="w-36 rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 disabled:opacity-40"
+          className="w-36 rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500 disabled:opacity-40 dark:[color-scheme:dark]"
           required
         >
           {!sfTime && <option value="">Time</option>}

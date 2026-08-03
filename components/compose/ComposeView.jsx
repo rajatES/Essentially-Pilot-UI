@@ -203,7 +203,7 @@ export default function ComposeView({ prefill, appSettings, me, templates, onNav
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-gray-800 px-3 py-2.5">
             <Tag size={15} className="shrink-0 text-slate-400 dark:text-gray-500" />
             <select value={state.contentType} onChange={(e) => update({ contentType: e.target.value })}
-              className="flex-1 bg-transparent text-sm outline-none">
+              className="flex-1 bg-transparent text-sm text-slate-800 dark:text-gray-100 outline-none dark:[color-scheme:dark]">
               <option value="">Content type (required to publish)</option>
               <option value="infographic">Infographic</option>
               <option value="meme_image">Meme / Image</option>
@@ -225,7 +225,7 @@ export default function ComposeView({ prefill, appSettings, me, templates, onNav
                     ...(t ? { body: state.body ? `${state.body}\n\n${t.content || ""}` : t.content || "" } : {}),
                   });
                 }}
-                className="flex-1 bg-transparent text-sm outline-none"
+                className="flex-1 bg-transparent text-sm text-slate-800 dark:text-gray-100 outline-none dark:[color-scheme:dark]"
               >
                 <option value="">Apply a template…</option>
                 {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}

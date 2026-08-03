@@ -68,12 +68,12 @@ export default function PlatformOptionsPanel({ selectedPlatforms, options, onCha
               onChange={(e) => set("youtube", { title: e.target.value })}
               maxLength={100}
               placeholder={captionFirstLine ? `Title: “${captionFirstLine.slice(0, 60)}${captionFirstLine.length > 60 ? "…" : ""}”` : "Video title (defaults to the first caption line)"}
-              className="flex-1 rounded-lg border border-slate-200 dark:border-gray-800 bg-transparent px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500"
+              className="flex-1 rounded-lg border border-slate-200 dark:border-gray-800 bg-transparent px-2.5 py-1.5 text-xs text-slate-800 dark:text-gray-100 placeholder:text-slate-400 dark:placeholder:text-gray-500 outline-none focus:border-indigo-500"
             />
             <select
               value={options?.youtube?.privacy || "public"}
               onChange={(e) => set("youtube", { privacy: e.target.value })}
-              className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-xs outline-none"
+              className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-xs text-slate-800 dark:text-gray-100 outline-none dark:[color-scheme:dark]"
             >
               <option value="public">Public</option>
               <option value="unlisted">Unlisted</option>
