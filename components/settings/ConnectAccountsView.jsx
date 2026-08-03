@@ -6,7 +6,11 @@ import { apiUrl } from "@/lib/apiClient";
 // onConnectMeta(switchAccount) — opens the Facebook JS-SDK popup flow (page
 // selection + per-account tracking). Meta platforms use it; YouTube keeps its
 // own OAuth redirect.
-export default function ConnectAccountsView({ onConnectMeta }) {
+//
+// canManageAccounts gates the full platform list. Non-admins (members) get a
+// YouTube-only view — connecting a channel is open to everyone, but Meta/X/
+// Threads connect and page management stay admin/Group-Head only.
+export default function ConnectAccountsView({ onConnectMeta, canManageAccounts = true }) {
   const platforms = [
     {
       id: "facebook",
@@ -55,17 +59,26 @@ export default function ConnectAccountsView({ onConnectMeta }) {
     }
   ];
 
+  // Members without account-management rights can still connect YouTube.
+  const visiblePlatforms = canManageAccounts
+    ? platforms
+    : platforms.filter((p) => p.id === "youtube");
+
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Connect Accounts</h2>
-        <p className="mt-1 text-slate-600 dark:text-gray-300">Connect your social media accounts to schedule and manage posts</p>
+        <p className="mt-1 text-slate-600 dark:text-gray-300">
+          {canManageAccounts
+            ? "Connect your social media accounts to schedule and manage posts"
+            : "Connect a YouTube channel to schedule videos"}
+        </p>
       </div>
 
       {/* Platforms Grid */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {platforms.map((platform) => {
+        {visiblePlatforms.map((platform) => {
           const IconComponent = platform.icon;
           return (
             <div key={platform.id} className="flex flex-col rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm transition-all hover:shadow-md">
@@ -121,11 +134,17 @@ export default function ConnectAccountsView({ onConnectMeta }) {
       <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/10 p-4 text-sm text-indigo-800 dark:text-indigo-300">
         <p className="font-medium">💡 How it works:</p>
         <ul className="mt-2 space-y-1 text-indigo-700 dark:text-indigo-400">
-          <li>• <strong>Facebook & Instagram:</strong> Connect through the same popup. Pick the Pages you want; linked Instagram Business accounts come along automatically.</li>
-          <li>• <strong>Multiple accounts:</strong> Pages from different Facebook accounts can be connected side by side — use “Connect a different account” to sign in as another user.</li>
-          <li>• <strong>Development mode:</strong> every Facebook account used to connect must be added as a Tester under App Roles in the Meta developer dashboard.</li>
-          <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels.</li>
-          <li>• <strong>Threads:</strong> Uses its own Threads login (not Facebook) — each Threads profile connects individually and posts publish via the queue at the scheduled time.</li>
+          {canManageAccounts ? (
+            <>
+              <li>• <strong>Facebook & Instagram:</strong> Connect through the same popup. Pick the Pages you want; linked Instagram Business accounts come along automatically.</li>
+              <li>• <strong>Multiple accounts:</strong> Pages from different Facebook accounts can be connected side by side — use “Connect a different account” to sign in as another user.</li>
+              <li>• <strong>Development mode:</strong> every Facebook account used to connect must be added as a Tester under App Roles in the Meta developer dashboard.</li>
+              <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels.</li>
+              <li>• <strong>Threads:</strong> Uses its own Threads login (not Facebook) — each Threads profile connects individually and posts publish via the queue at the scheduled time.</li>
+            </>
+          ) : (
+            <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels. The channel becomes available to everyone in the workspace.</li>
+          )}
         </ul>
       </div>
     </div>

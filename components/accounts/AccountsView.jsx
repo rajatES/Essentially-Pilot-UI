@@ -185,17 +185,21 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
         >
           Manage Accounts
         </button>
-        {canManageAccounts && (
-          <button
-            onClick={() => setAccountsTab("connect")}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${accountsTab === "connect" ? "border-indigo-600 text-indigo-700 dark:text-indigo-400" : "border-transparent text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"}`}
-          >
-            Connect Accounts
-          </button>
-        )}
+        {/* Everyone can reach the Connect tab; non-admins see a YouTube-only view. */}
+        <button
+          onClick={() => setAccountsTab("connect")}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${accountsTab === "connect" ? "border-indigo-600 text-indigo-700 dark:text-indigo-400" : "border-transparent text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"}`}
+        >
+          Connect Accounts
+        </button>
       </div>
 
-      {accountsTab === "connect" && canManageAccounts && <ConnectAccountsView onConnectMeta={onConnectFacebook} />}
+      {accountsTab === "connect" && (
+        <ConnectAccountsView
+          onConnectMeta={canManageAccounts ? onConnectFacebook : undefined}
+          canManageAccounts={canManageAccounts}
+        />
+      )}
 
       {accountsTab === "manage" && (
       <div className="mx-auto max-w-4xl space-y-4">
