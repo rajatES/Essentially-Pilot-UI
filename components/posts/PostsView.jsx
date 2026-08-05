@@ -19,6 +19,23 @@ const TABS = [
   { id: "delivered", label: "Delivered",        statuses: ["sent", "deleted"] },
 ];
 
+const TYPE_OPTIONS = [
+  ["all", "All types"],
+  ["video", "Video"],
+  ["photo", "Photo"],
+  ["link", "Link"],
+  ["text", "Text only"],
+];
+
+// Media kind of a post, from its media array. Legacy image_url counts as photo.
+function derivePostType(p) {
+  const media = Array.isArray(p.media) ? p.media : [];
+  if (media.some((m) => m?.type === "video")) return "video";
+  if (media.some((m) => m?.type === "image") || p.image_url) return "photo";
+  if (p.link_url) return "link";
+  return "text";
+}
+
 export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
   const showToast = useToast();
   const invalidatePosts = usePostsInvalidate();
@@ -33,6 +50,7 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
   const [authorFilter, setAuthorFilter] = useState("all");
   const [accountFilter, setAccountFilter] = useState("all");
   const [platformFilter, setPlatformFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -100,6 +118,7 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
       const targets = p.post_targets || [];
       if (accountFilter !== "all" && !targets.some((t) => t.social_account_id === accountFilter)) return false;
       if (platformFilter !== "all" && !targets.some((t) => (t.social_accounts?.platform || t.platform) === platformFilter)) return false;
+      if (typeFilter !== "all" && derivePostType(p) !== typeFilter) return false;
       if (sourceFilter !== "all" && (p.source || "app") !== sourceFilter) return false;
       if (q && !(p.body || "").toLowerCase().includes(q)) return false;
       const when = new Date(p.scheduled_for);
@@ -107,7 +126,7 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
       if (dateTo && when > new Date(`${dateTo}T23:59:59`)) return false;
       return true;
     });
-  }, [posts, authorFilter, accountFilter, platformFilter, sourceFilter, search, dateFrom, dateTo]);
+  }, [posts, authorFilter, accountFilter, platformFilter, typeFilter, sourceFilter, search, dateFrom, dateTo]);
 
   const tabCounts = useMemo(() => {
     const counts = {};
@@ -169,6 +188,10 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
           <option value="all">All platforms</option>
           {platformsInUse.map((p) => <option key={p} value={p}>{PLATFORM_META[p]?.label || p}</option>)}
         </select>
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} title="Content type"
+          className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-slate-600 dark:text-gray-300 outline-none">
+          {TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
         <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} title="How the post was created"
           className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-slate-600 dark:text-gray-300 outline-none">
           <option value="all">Any source</option>
@@ -192,9 +215,9 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
           className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-slate-600 dark:text-gray-300 outline-none" />
         <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="To date"
           className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-slate-600 dark:text-gray-300 outline-none" />
-        {(search || accountFilter !== "all" || platformFilter !== "all" || authorFilter !== "all" || sourceFilter !== "all" || dateFrom || dateTo) && (
+        {(search || accountFilter !== "all" || platformFilter !== "all" || typeFilter !== "all" || authorFilter !== "all" || sourceFilter !== "all" || dateFrom || dateTo) && (
           <button
-            onClick={() => { setSearch(""); setAccountFilter("all"); setPlatformFilter("all"); setAuthorFilter("all"); setSourceFilter("all"); setDateFrom(""); setDateTo(""); }}
+            onClick={() => { setSearch(""); setAccountFilter("all"); setPlatformFilter("all"); setTypeFilter("all"); setAuthorFilter("all"); setSourceFilter("all"); setDateFrom(""); setDateTo(""); }}
             className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
           >
             Clear filters

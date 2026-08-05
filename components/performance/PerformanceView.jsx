@@ -23,6 +23,14 @@ const SORTS = [
   ["recent", "Most recent"],
 ];
 
+const TYPE_OPTIONS = [
+  ["all", "All types"],
+  ["video", "Video"],
+  ["photo", "Photo"],
+  ["link", "Link"],
+  ["text", "Text only"],
+];
+
 // Compact number formatting (1.2K / 3.4M).
 function fmt(n) {
   const v = Number(n) || 0;
@@ -50,6 +58,8 @@ export default function PerformanceView() {
   const [days, setDays] = useState(30);
   const [platform, setPlatform] = useState("all");
   const [sport, setSport] = useState("all");
+  const [pageFilter, setPageFilter] = useState("all");
+  const [postType, setPostType] = useState("all");
   const [sortKey, setSortKey] = useState("engagement");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -71,12 +81,15 @@ export default function PerformanceView() {
 
   const sportOptions = useMemo(() => [...new Set(posts.map((p) => p.category || "Other"))].sort(), [posts]);
   const platformOptions = useMemo(() => [...new Set(posts.flatMap((p) => p.platforms || []))].sort(), [posts]);
+  const pageOptions = useMemo(() => [...new Set(posts.flatMap((p) => p.pages || []))].sort(), [posts]);
 
   const filtered = useMemo(() => {
     let list = posts.filter((p) => {
       const matchesPlatform = platform === "all" || (p.platforms || []).includes(platform);
       const matchesSport = sport === "all" || (p.category || "Other") === sport;
-      return matchesPlatform && matchesSport;
+      const matchesPage = pageFilter === "all" || (p.pages || []).includes(pageFilter);
+      const matchesType = postType === "all" || p.postType === postType;
+      return matchesPlatform && matchesSport && matchesPage && matchesType;
     });
     const sorters = {
       engagement: (a, b) => b.engagement - a.engagement,
@@ -86,7 +99,7 @@ export default function PerformanceView() {
       recent: (a, b) => new Date(b.sent_at) - new Date(a.sent_at),
     };
     return [...list].sort(sorters[sortKey] || sorters.engagement);
-  }, [posts, platform, sport, sortKey]);
+  }, [posts, platform, sport, pageFilter, postType, sortKey]);
 
   const totals = useMemo(() => {
     const t = { posts: filtered.length, withInsights: 0, likes: 0, comments: 0, shares: 0, engagement: 0 };
@@ -188,6 +201,13 @@ export default function PerformanceView() {
           <option value="all">All sports</option>
           {sportOptions.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select value={pageFilter} onChange={(e) => setPageFilter(e.target.value)} className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500">
+          <option value="all">All pages</option>
+          {pageOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select value={postType} onChange={(e) => setPostType(e.target.value)} title="Content type" className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500">
+          {TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
         <select value={sortKey} onChange={(e) => setSortKey(e.target.value)} className="ml-auto rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500">
           {SORTS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
         </select>
@@ -206,12 +226,7 @@ export default function PerformanceView() {
         <div className="space-y-2">
           {filtered.map((p) => (
             <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 shadow-sm">
-              {p.image_url ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={p.image_url} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
-              ) : (
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-gray-800 text-slate-300 dark:text-gray-600"><ImageFallback /></div>
-              )}
+              <Thumb url={p.image_url} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   {(p.platforms || []).map((pl) => <PlatformIcon key={pl} platform={pl} size={12} />)}
@@ -255,4 +270,18 @@ function Metric({ icon: Icon, value }) {
 
 function ImageFallback() {
   return <BarChart3 size={18} />;
+}
+
+// Show the placeholder when the image is missing or fails to load.
+function Thumb({ url }) {
+  const [ok, setOk] = useState(true);
+  if (url && ok) {
+    /* eslint-disable-next-line @next/next/no-img-element */
+    return <img src={url} alt="" onError={() => setOk(false)} className="h-14 w-14 shrink-0 rounded-lg object-cover" />;
+  }
+  return (
+    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-gray-800 text-slate-300 dark:text-gray-600">
+      <ImageFallback />
+    </div>
+  );
 }

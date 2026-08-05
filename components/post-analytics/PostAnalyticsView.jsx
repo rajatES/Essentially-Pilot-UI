@@ -7,6 +7,7 @@ import {
   BarChart3, Table2, LayoutGrid, Download, RefreshCw, DownloadCloud, Columns3, Search, X,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Info, MoreHorizontal,
   ExternalLink, Image as ImageIcon, Video, Link2, FileText,
+  TrendingUp, Heart, MessageCircle, Share2, Eye,
 } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import { usePostAnalytics, usePostsData } from "@/lib/queries";
@@ -47,6 +48,7 @@ export default function PostAnalyticsView() {
   const [start, setStart] = useState(initStart);
   const [end, setEnd] = useState(initEnd);
 
+  const [tab, setTab] = useState("overview"); // overview | posts
   const [viewMode, setViewMode] = useState("list");
   const [pageFilter, setPageFilter] = useState([]); // accountIds
   const [platformFilter, setPlatformFilter] = useState("all");
@@ -132,6 +134,36 @@ export default function PostAnalyticsView() {
       return 0;
     });
   }, [rows, pageFilter, platformFilter, typeFilter, originFilter, search, sort]);
+
+  // Overview KPIs over the filtered set (app-made + organic posts).
+  const overview = useMemo(() => {
+    const agg = { posts: filtered.length, likes: 0, comments: 0, shares: 0, reach: 0, views: 0, engagement: 0, withInsights: 0 };
+    const pageMap = {};
+    const typeMap = {};
+    for (const r of filtered) {
+      const m = r.metrics || {};
+      const eng = m.interactions != null ? m.interactions : (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+      agg.likes += m.likes || 0;
+      agg.comments += m.comments || 0;
+      agg.shares += m.shares || 0;
+      agg.reach += m.reach || 0;
+      agg.views += m.views || 0;
+      agg.engagement += eng;
+      if (r.hasInsights) agg.withInsights++;
+      if (r.page) pageMap[r.page] = (pageMap[r.page] || 0) + eng;
+      const ty = r.postType || "other";
+      typeMap[ty] = (typeMap[ty] || 0) + 1;
+    }
+    const topPages = Object.entries(pageMap).map(([name, value]) => ({ name, value: Math.round(value) })).sort((a, b) => b.value - a.value).slice(0, 8);
+    const maxPage = Math.max(1, ...topPages.map((p) => p.value));
+    const byType = Object.entries(typeMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+    const maxType = Math.max(1, ...byType.map((t) => t.count));
+    return {
+      ...agg,
+      topPages: topPages.map((p) => ({ ...p, pct: Math.round((p.value / maxPage) * 100) })),
+      byType: byType.map((t) => ({ ...t, pct: Math.round((t.count / maxType) * 100) })),
+    };
+  }, [filtered]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const startIdx = (page - 1) * perPage;
@@ -253,6 +285,20 @@ export default function PostAnalyticsView() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-slate-200 dark:border-gray-800">
+        {[["overview", "Overview"], ["posts", "Posts"]].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+              tab === id
+                ? "border-indigo-600 text-indigo-700 dark:text-indigo-400"
+                : "border-transparent text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 shadow-sm">
         {/* Page multi-select */}
@@ -326,6 +372,7 @@ export default function PostAnalyticsView() {
           <button onClick={clearFilters} className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Clear</button>
         ) : null}
 
+        {tab === "posts" && (
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => setShowCustomise(true)} title="Customise columns"
             className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm font-medium text-slate-700 dark:text-gray-200 hover:bg-slate-50 dark:hover:bg-gray-800/50">
@@ -346,50 +393,156 @@ export default function PostAnalyticsView() {
             </button>
           </div>
         </div>
+        )}
       </div>
 
-      <p className="px-1 text-xs text-slate-500 dark:text-gray-400">
-        {filtered.length.toLocaleString()} row{filtered.length === 1 ? "" : "s"} (one per post × page)
-      </p>
-
-      {/* Content */}
-      {isLoading ? (
-        <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-100 dark:bg-gray-800" />)}</div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-16 text-center shadow-sm">
-          <BarChart3 size={32} className="mx-auto mb-3 text-slate-300 dark:text-gray-600" />
-          <p className="text-sm font-medium text-slate-600 dark:text-gray-300">No published posts in this range</p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">Publish posts, then hit <strong>Refresh</strong> to pull their metrics.</p>
-        </div>
-      ) : viewMode === "list" ? (
-        <PostTable rows={pageRows} cols={cols} sort={sort} onSort={toggleSort} />
+      {tab === "overview" ? (
+        <OverviewPanel overview={overview} isLoading={isLoading} />
       ) : (
-        <PostGrid rows={pageRows} />
-      )}
+        <>
+          <p className="px-1 text-xs text-slate-500 dark:text-gray-400">
+            {filtered.length.toLocaleString()} row{filtered.length === 1 ? "" : "s"} (one per post × page)
+          </p>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3 shadow-sm">
-          <span className="text-sm text-slate-500 dark:text-gray-400">
-            {startIdx + 1}–{Math.min(startIdx + perPage, filtered.length)} of {filtered.length.toLocaleString()}
-          </span>
-          <div className="flex items-center gap-2">
-            <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}
-              className="flex items-center gap-1 rounded-md border border-slate-200 dark:border-gray-800 px-2.5 py-1.5 text-sm font-medium text-slate-600 dark:text-gray-300 disabled:opacity-40">
-              <ChevronLeft size={15} /> Prev
-            </button>
-            <span className="text-sm font-semibold text-slate-700 dark:text-gray-200">Page {page} / {totalPages}</span>
-            <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}
-              className="flex items-center gap-1 rounded-md border border-slate-200 dark:border-gray-800 px-2.5 py-1.5 text-sm font-medium text-slate-600 dark:text-gray-300 disabled:opacity-40">
-              Next <ChevronRight size={15} />
-            </button>
-          </div>
-        </div>
+          {/* Content */}
+          {isLoading ? (
+            <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-100 dark:bg-gray-800" />)}</div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-16 text-center shadow-sm">
+              <BarChart3 size={32} className="mx-auto mb-3 text-slate-300 dark:text-gray-600" />
+              <p className="text-sm font-medium text-slate-600 dark:text-gray-300">No published posts in this range</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">Publish posts, then hit <strong>Refresh</strong> to pull their metrics.</p>
+            </div>
+          ) : viewMode === "list" ? (
+            <PostTable rows={pageRows} cols={cols} sort={sort} onSort={toggleSort} />
+          ) : (
+            <PostGrid rows={pageRows} />
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3 shadow-sm">
+              <span className="text-sm text-slate-500 dark:text-gray-400">
+                {startIdx + 1}–{Math.min(startIdx + perPage, filtered.length)} of {filtered.length.toLocaleString()}
+              </span>
+              <div className="flex items-center gap-2">
+                <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}
+                  className="flex items-center gap-1 rounded-md border border-slate-200 dark:border-gray-800 px-2.5 py-1.5 text-sm font-medium text-slate-600 dark:text-gray-300 disabled:opacity-40">
+                  <ChevronLeft size={15} /> Prev
+                </button>
+                <span className="text-sm font-semibold text-slate-700 dark:text-gray-200">Page {page} / {totalPages}</span>
+                <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}
+                  className="flex items-center gap-1 rounded-md border border-slate-200 dark:border-gray-800 px-2.5 py-1.5 text-sm font-medium text-slate-600 dark:text-gray-300 disabled:opacity-40">
+                  Next <ChevronRight size={15} />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {showCustomise && (
         <CustomiseColumnsModal visible={visibleColumns} onApply={applyColumns} onClose={() => setShowCustomise(false)} />
       )}
+    </div>
+  );
+}
+
+// ── Overview tab ──────────────────────────────────────────────────────────────
+function Kpi({ icon: Icon, label, value, sub }) {
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+      <div className="flex items-center gap-2 text-slate-500 dark:text-gray-400">
+        <Icon size={14} />
+        <span className="text-xs font-medium">{label}</span>
+      </div>
+      <p className="mt-1.5 text-2xl font-bold text-slate-800 dark:text-white">{value}</p>
+      {sub && <p className="text-xs text-slate-400 dark:text-gray-500">{sub}</p>}
+    </div>
+  );
+}
+
+function OverviewPanel({ overview, isLoading }) {
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        {Array.from({ length: 7 }).map((_, i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-slate-100 dark:bg-gray-800" />)}
+      </div>
+    );
+  }
+  if (!overview.posts) {
+    return (
+      <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-16 text-center shadow-sm">
+        <BarChart3 size={32} className="mx-auto mb-3 text-slate-300 dark:text-gray-600" />
+        <p className="text-sm font-medium text-slate-600 dark:text-gray-300">No posts in this range</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">Adjust the filters, or hit <strong>Sync</strong> to pull all page content.</p>
+      </div>
+    );
+  }
+  const avg = overview.posts ? Math.round(overview.engagement / overview.posts) : 0;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        <Kpi icon={BarChart3} label="Posts" value={overview.posts.toLocaleString()} sub={`${overview.withInsights} with insights`} />
+        <Kpi icon={TrendingUp} label="Engagement" value={compactNum(overview.engagement) ?? "0"} sub={`${compactNum(avg) ?? 0}/post`} />
+        <Kpi icon={Heart} label="Likes" value={compactNum(overview.likes) ?? "0"} />
+        <Kpi icon={MessageCircle} label="Comments" value={compactNum(overview.comments) ?? "0"} />
+        <Kpi icon={Share2} label="Shares" value={compactNum(overview.shares) ?? "0"} />
+        <Kpi icon={Eye} label="Reach" value={compactNum(overview.reach) ?? "0"} />
+        <Kpi icon={Eye} label="Views" value={compactNum(overview.views) ?? "0"} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {overview.topPages.length > 0 && (
+          <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+            <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-gray-200">Top pages by engagement</p>
+            <div className="space-y-2">
+              {overview.topPages.map((p) => (
+                <div key={p.name} className="flex items-center gap-3">
+                  <span className="w-40 shrink-0 truncate text-xs text-slate-600 dark:text-gray-300" title={p.name}>{p.name}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-gray-800">
+                    <div className="h-full rounded-full bg-indigo-500" style={{ width: `${p.pct}%` }} />
+                  </div>
+                  <span className="w-12 shrink-0 text-right text-xs font-medium text-slate-500 dark:text-gray-400">{compactNum(p.value) ?? 0}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {overview.byType.length > 0 && (
+          <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
+            <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-gray-200">Posts by content type</p>
+            <div className="space-y-2">
+              {overview.byType.map((t) => (
+                <div key={t.name} className="flex items-center gap-3">
+                  <span className="flex w-40 shrink-0 items-center gap-1.5 text-xs capitalize text-slate-600 dark:text-gray-300">
+                    {(() => { const I = TYPE_ICON[t.name] || FileText; return <I size={12} className="shrink-0" />; })()}
+                    {t.name}
+                  </span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-gray-800">
+                    <div className="h-full rounded-full bg-indigo-500" style={{ width: `${t.pct}%` }} />
+                  </div>
+                  <span className="w-12 shrink-0 text-right text-xs font-medium text-slate-500 dark:text-gray-400">{t.count.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Show the placeholder when the image is missing or fails to load.
+function Thumb({ url, imgClassName, boxClassName, iconSize = 18 }) {
+  const [ok, setOk] = useState(true);
+  if (url && ok) {
+    /* eslint-disable-next-line @next/next/no-img-element */
+    return <img src={url} alt="" onError={() => setOk(false)} className={imgClassName} />;
+  }
+  return (
+    <div className={`flex items-center justify-center bg-slate-100 text-slate-300 dark:bg-gray-800 dark:text-gray-600 ${boxClassName}`}>
+      <ImageIcon size={iconSize} />
     </div>
   );
 }
@@ -464,12 +617,9 @@ function TitleCell({ row }) {
   return (
     <div className="flex items-center gap-3">
       <div className="relative shrink-0">
-        {row.thumbnailUrl ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={row.thumbnailUrl} alt="" className="h-11 w-11 rounded-md border border-slate-200 object-cover dark:border-gray-800" />
-        ) : (
-          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-slate-100 text-slate-300 dark:bg-gray-800 dark:text-gray-600"><ImageIcon size={18} /></div>
-        )}
+        <Thumb url={row.thumbnailUrl}
+          imgClassName="h-11 w-11 rounded-md border border-slate-200 object-cover dark:border-gray-800"
+          boxClassName="h-11 w-11 rounded-md" iconSize={18} />
         <span className="absolute -bottom-1 -right-1 rounded-full bg-white p-0.5 shadow-sm dark:bg-gray-900"><PlatformIcon platform={row.platform} size={11} /></span>
       </div>
       <div className="min-w-0 flex-1">
@@ -570,12 +720,7 @@ function PostGrid({ rows }) {
               <p className="line-clamp-2 min-h-[2.5rem] text-xs text-slate-600 dark:text-gray-300">{r.title || <span className="italic text-slate-400">No caption</span>}</p>
             </div>
             <div className="mt-2 aspect-video bg-slate-100 dark:bg-gray-800">
-              {r.thumbnailUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={r.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full items-center justify-center text-slate-300 dark:text-gray-600"><ImageIcon size={26} /></div>
-              )}
+              <Thumb url={r.thumbnailUrl} imgClassName="h-full w-full object-cover" boxClassName="h-full w-full" iconSize={26} />
             </div>
             <div className="grid grid-cols-3 gap-px bg-slate-100 dark:bg-gray-800 text-center">
               <Stat label="Reach" value={m.reach} />
