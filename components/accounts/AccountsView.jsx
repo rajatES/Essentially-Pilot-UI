@@ -13,7 +13,7 @@ import AccountAvatar from "@/components/common/AccountAvatar";
 // Accounts hub (Manage + Connect tabs), extracted from app/app/page.js.
 // The Facebook JS-SDK connect flow stays in the shell (it owns the SDK and
 // the page-selection modal) — passed in via onConnectFacebook / connectBusy.
-export default function AccountsView({ me, canManageAccounts, onConnectFacebook, connectBusy, onNavigate }) {
+export default function AccountsView({ me, canManageAccounts, onConnectFacebook, onConnectInstagram, connectBusy, onNavigate }) {
   const showToast = useToast();
   const invalidatePosts = usePostsInvalidate();
   const { data } = usePostsData();
@@ -185,7 +185,7 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
         >
           Manage Accounts
         </button>
-        {/* Everyone can reach the Connect tab; non-admins see a YouTube-only view. */}
+        {/* Everyone can reach the Connect tab; non-admins see an Instagram + YouTube-only view. */}
         <button
           onClick={() => setAccountsTab("connect")}
           className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px ${accountsTab === "connect" ? "border-indigo-600 text-indigo-700 dark:text-indigo-400" : "border-transparent text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"}`}
@@ -197,6 +197,7 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
       {accountsTab === "connect" && (
         <ConnectAccountsView
           onConnectMeta={canManageAccounts ? onConnectFacebook : undefined}
+          onConnectInstagram={onConnectInstagram}
           canManageAccounts={canManageAccounts}
         />
       )}

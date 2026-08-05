@@ -93,6 +93,12 @@ function AppShell() {
   const [fetchedGrantor, setFetchedGrantor] = useState(null); // FB account that granted the pages being confirmed
   const [pagePicks, setPagePicks] = useState([]);
   const [modalSearch, setModalSearch] = useState("");   // search inside connect modal
+  // "meta" = combined Facebook Pages + Instagram picker (admin/Group-Head flow).
+  // "instagram" = Instagram-only picker, open to every member — the popup
+  // still returns Facebook Pages (Meta's API always does), but they're
+  // filtered out before the modal ever shows them, so a non-admin can never
+  // connect a Page through this door.
+  const [connectMode, setConnectMode] = useState("meta");
 
   // ── auth gate ──────────────────────────────────────────────────────────────
   // With JWT-in-localStorage there's no cookie for edge middleware to read, so
@@ -191,9 +197,13 @@ function AppShell() {
   // user can sign in with a DIFFERENT account — this is how pages from
   // multiple FB accounts get connected (each page keeps its own token, so
   // pages from several accounts coexist happily).
+  // mode="instagram" runs the same popup but fetchFacebookPages filters the
+  // result down to linked Instagram accounts only (see below) — anyone can
+  // trigger this; mode="meta" (Facebook Pages + Instagram) stays behind
+  // canManageAccounts in the UI that calls this.
   // NOTE: while the Meta app is in development mode, every FB account used
   // here must have a role on the app (Meta dashboard → App Roles → Testers).
-  function connectFacebook(switchAccount = false) {
+  function connectFacebook(switchAccount = false, mode = "meta") {
     if (!fbReady || !window.FB) {
       showToast("Facebook SDK is still loading — try again in a second.", "warn");
       return;
@@ -204,7 +214,7 @@ function AppShell() {
         showToast("Facebook login was cancelled or denied.", "error");
         return;
       }
-      fetchFacebookPages(response.authResponse.accessToken);
+      fetchFacebookPages(response.authResponse.accessToken, mode);
     };
 
     // Two login modes depending on how the Meta app is set up:
@@ -249,7 +259,7 @@ function AppShell() {
     });
   }
 
-  async function fetchFacebookPages(shortLivedToken) {
+  async function fetchFacebookPages(shortLivedToken, mode = "meta") {
     setFbBusy(true);
     try {
       const data = await apiJson("/api/social/facebook/fetch-pages", {
@@ -257,16 +267,29 @@ function AppShell() {
         body: JSON.stringify({ shortLivedToken })
       });
 
-      if (!data.pages?.length) {
-        showToast(data.error || "No Pages found on your account.", "error");
+      // Instagram-only connect (open to every member): the popup always
+      // returns Facebook Pages alongside any linked Instagram accounts, so
+      // filter down to Instagram here — Pages never reach the picker through
+      // this path. Each Instagram account carries its own access token, so
+      // connecting one doesn't require connecting its linked Page too.
+      const available = mode === "instagram" ? (data.pages || []).filter((p) => p.platform === "instagram") : data.pages;
+
+      if (!available?.length) {
+        showToast(
+          mode === "instagram"
+            ? "No Instagram Business/Creator accounts found. Make sure an Instagram Business or Creator account is linked to a Facebook Page."
+            : (data.error || "No Pages found on your account."),
+          "error"
+        );
         return;
       }
 
       // Open the selection modal with everything pre-checked. Pages already
       // connected stay checked-and-locked visually via the accounts list.
-      setFetchedPages(data.pages);
+      setConnectMode(mode);
+      setFetchedPages(available);
       setFetchedGrantor(data.grantor || null);
-      setPagePicks(data.pages.map((p) => p.id));
+      setPagePicks(available.map((p) => p.id));
       setModalSearch("");
     } catch (err) {
       showToast(err.message, "error");
@@ -277,7 +300,7 @@ function AppShell() {
 
   async function confirmFacebookPages() {
     const chosen = fetchedPages.filter((p) => pagePicks.includes(p.id));
-    if (!chosen.length) { showToast("Select at least one Page.", "error"); return; }
+    if (!chosen.length) { showToast(connectMode === "instagram" ? "Select at least one account." : "Select at least one Page.", "error"); return; }
 
     setFbBusy(true);
     try {
@@ -285,11 +308,13 @@ function AppShell() {
         method: "POST",
         body: JSON.stringify({ pages: chosen, grantor: fetchedGrantor })
       });
+      const noun = connectMode === "instagram" ? "account" : "page";
       setFetchedPages(null);
       setFetchedGrantor(null);
       setPagePicks([]);
       setModalSearch("");
-      showToast(`Connected ${data.connected} page${data.connected === 1 ? "" : "s"}.`, "ok");
+      setConnectMode("meta");
+      showToast(`Connected ${data.connected} ${noun}${data.connected === 1 ? "" : "s"}.`, "ok");
       invalidatePosts();
     } catch (err) {
       showToast(err.message, "error");
@@ -428,6 +453,7 @@ function AppShell() {
               me={me}
               canManageAccounts={canManageAccounts}
               onConnectFacebook={connectFacebook}
+              onConnectInstagram={() => connectFacebook(false, "instagram")}
               connectBusy={fbBusy}
               onNavigate={setView}
             />
@@ -454,14 +480,16 @@ function AppShell() {
           <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 px-5 py-4">
               <div>
-                <p className="font-semibold text-slate-800 dark:text-white">Select Pages to connect</p>
+                <p className="font-semibold text-slate-800 dark:text-white">
+                  {connectMode === "instagram" ? "Select Instagram accounts to connect" : "Select Pages to connect"}
+                </p>
                 <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">
                   {fetchedGrantor?.fb_user_name && <>from <strong>{fetchedGrantor.fb_user_name}</strong> · </>}
                   {fetchedPages.length} found · {pagePicks.length} selected
                 </p>
               </div>
               <button
-                onClick={() => { setFetchedPages(null); setFetchedGrantor(null); setPagePicks([]); setModalSearch(""); }}
+                onClick={() => { setFetchedPages(null); setFetchedGrantor(null); setPagePicks([]); setModalSearch(""); setConnectMode("meta"); }}
                 className="rounded-lg p-1.5 text-slate-400 dark:text-gray-500 hover:bg-slate-100 dark:hover:bg-gray-800"
               >
                 <X size={18} />
@@ -542,7 +570,7 @@ function AppShell() {
 
             <div className="flex items-center justify-end gap-2 border-t border-slate-100 dark:border-gray-800 px-5 py-3">
               <button
-                onClick={() => { setFetchedPages(null); setPagePicks([]); setModalSearch(""); }}
+                onClick={() => { setFetchedPages(null); setPagePicks([]); setModalSearch(""); setConnectMode("meta"); }}
                 className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-gray-800"
               >
                 Cancel

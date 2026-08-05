@@ -4,13 +4,18 @@ import { Facebook, Instagram, Youtube, MessageCircle, Twitter } from "lucide-rea
 import { apiUrl } from "@/lib/apiClient";
 
 // onConnectMeta(switchAccount) — opens the Facebook JS-SDK popup flow (page
-// selection + per-account tracking). Meta platforms use it; YouTube keeps its
-// own OAuth redirect.
+// selection + per-account tracking) for the combined Facebook+Instagram
+// picker. YouTube keeps its own OAuth redirect. onConnectInstagram() opens
+// the same popup but the picker it returns is filtered down to linked
+// Instagram accounts only (see AppShell.fetchFacebookPages mode="instagram")
+// — an Instagram account has its own access token, so connecting one never
+// requires also connecting its linked Facebook Page.
 //
-// canManageAccounts gates the full platform list. Non-admins (members) get a
-// YouTube-only view — connecting a channel is open to everyone, but Meta/X/
-// Threads connect and page management stay admin/Group-Head only.
-export default function ConnectAccountsView({ onConnectMeta, canManageAccounts = true }) {
+// canManageAccounts gates the full platform list. Non-admins (members) get an
+// Instagram + YouTube view — connecting an Instagram account or a YouTube
+// channel is open to everyone, but Facebook Pages/X/Threads connect and page
+// management stay admin/Group-Head only.
+export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram, canManageAccounts = true }) {
   const platforms = [
     {
       id: "facebook",
@@ -26,7 +31,9 @@ export default function ConnectAccountsView({ onConnectMeta, canManageAccounts =
       name: "Instagram",
       icon: Instagram,
       color: "bg-pink-50 text-pink-600 border-pink-200 dark:bg-pink-500/10 dark:text-pink-400 dark:border-pink-500/30",
-      onClick: () => onConnectMeta?.(false),
+      // Admins use the combined Facebook+Instagram popup they already have;
+      // everyone else gets the Instagram-only flow (no Facebook Page connect).
+      onClick: canManageAccounts ? () => onConnectMeta?.(false) : () => onConnectInstagram?.(),
       buttonText: "Connect Business/Creator",
       description: "Connect through Facebook Pages (Business/Creator accounts linked to Pages)"
     },
@@ -59,10 +66,11 @@ export default function ConnectAccountsView({ onConnectMeta, canManageAccounts =
     }
   ];
 
-  // Members without account-management rights can still connect YouTube.
+  // Members without account-management rights can still connect Instagram
+  // and YouTube.
   const visiblePlatforms = canManageAccounts
     ? platforms
-    : platforms.filter((p) => p.id === "youtube");
+    : platforms.filter((p) => p.id === "instagram" || p.id === "youtube");
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -72,7 +80,7 @@ export default function ConnectAccountsView({ onConnectMeta, canManageAccounts =
         <p className="mt-1 text-slate-600 dark:text-gray-300">
           {canManageAccounts
             ? "Connect your social media accounts to schedule and manage posts"
-            : "Connect a YouTube channel to schedule videos"}
+            : "Connect an Instagram or YouTube account to schedule posts"}
         </p>
       </div>
 
@@ -143,7 +151,10 @@ export default function ConnectAccountsView({ onConnectMeta, canManageAccounts =
               <li>• <strong>Threads:</strong> Uses its own Threads login (not Facebook) — each Threads profile connects individually and posts publish via the queue at the scheduled time.</li>
             </>
           ) : (
-            <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels. The channel becomes available to everyone in the workspace.</li>
+            <>
+              <li>• <strong>Instagram:</strong> Connect an Instagram Business/Creator account linked to a Facebook Page — you'll sign in with Facebook, but only the Instagram account is connected (no Facebook Page is added). It becomes available to everyone in the workspace.</li>
+              <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels. The channel becomes available to everyone in the workspace.</li>
+            </>
           )}
         </ul>
       </div>
