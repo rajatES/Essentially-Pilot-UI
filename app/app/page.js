@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Send, Calendar, Users, Plus, RefreshCw, Clock, X, LayoutList,
   Search, FileText, Image as ImageIcon, LogOut,
@@ -51,6 +51,18 @@ const NAV = [
   { id: "settings",  label: "Settings",    icon: SettingsIcon }
 ];
 
+const NAV_IDS = new Set(NAV.map((n) => n.id));
+
+// The shell keeps the active view in the URL (?view=calendar) so a browser
+// refresh comes back to where you were instead of bouncing to the dashboard.
+// Unknown/absent values fall back to the dashboard, so a hand-edited or stale
+// link can never render a blank shell.
+function readViewFromLocation() {
+  if (typeof window === "undefined") return null;
+  const v = new URLSearchParams(window.location.search).get("view");
+  return v && NAV_IDS.has(v) ? v : null;
+}
+
 // ─── entry: toast context wraps the shell ───────────────────────────────────
 
 export default function AppPage() {
@@ -73,10 +85,27 @@ function AppShell() {
   const pendingCount = pendingData?.items?.length || 0;
 
   const [me, setMe] = useState(null);
-  const [view, setView] = useState("dashboard");
+  // null = not resolved yet. Every view below renders behind a `view === "x"`
+  // guard, so nothing mounts during that first tick — which is the point: had
+  // this defaulted to "dashboard", a refresh on any other tab would mount the
+  // dashboard and fire its queries before switching away.
+  const [view, setViewState] = useState(null);
   const [detailPost, setDetailPost] = useState(null); // post shown in the shared drawer
   const [appSettings, setAppSettings] = useState({});
   const [templates, setTemplates] = useState([]);
+
+  // Switch views and record it in the URL. replaceState (not pushState) keeps
+  // the Back button behaving exactly as before — Back still leaves the app
+  // rather than walking back through every tab the user clicked.
+  const setView = useCallback((next) => {
+    setViewState(next);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    // Dashboard is the default, so keep its URL clean (/app, not /app?view=dashboard).
+    if (next === "dashboard") url.searchParams.delete("view");
+    else url.searchParams.set("view", next);
+    window.history.replaceState({}, "", url);
+  }, []);
 
   // Composer prefill (template "Use", post Duplicate, calendar click-day).
   // Bumping nonce remounts ComposeView so the prefill is consumed exactly once.
@@ -113,31 +142,38 @@ function AppShell() {
     if (!getToken()) return; // not logged in — the auth-gate effect redirects
     // Returning from the Canva OAuth redirect?
     const params = new URLSearchParams(window.location.search);
+    // Where to land: the view the user was on before refreshing, unless this
+    // load is an OAuth return — those drop the user where the flow finished.
+    let landOn = readViewFromLocation() || "dashboard";
+    let isOAuthReturn = true;
+
     if (params.get("canva") === "connected") {
       showToast("Canva connected — click the Canva button to pick a design.", "ok");
-      setView("compose");
-      window.history.replaceState({}, "", "/app");
+      landOn = "compose";
     } else if (params.get("canva") === "error") {
       showToast("Canva connection failed — try again.", "error");
-      window.history.replaceState({}, "", "/app");
     } else if (params.get("youtube") === "connected") {
       // Returning from the YouTube OAuth redirect (success).
       showToast(`Connected ${params.get("channels") || ""} YouTube channel(s).`, "ok");
-      setView("accounts");
-      window.history.replaceState({}, "", "/app");
+      landOn = "accounts";
       invalidatePosts();
     } else if (params.get("error")) {
       // Returning from the Facebook or YouTube OAuth redirect (failure) —
       // both routes redirect back here with ?error=... on any rejection.
       showToast(params.get("error"), "error");
-      window.history.replaceState({}, "", "/app");
     } else if (params.get("success")) {
       // Returning from the Facebook OAuth redirect (success).
       showToast(params.get("success"), "ok");
-      setView("accounts");
-      window.history.replaceState({}, "", "/app");
+      landOn = "accounts";
       invalidatePosts();
+    } else {
+      isOAuthReturn = false;
     }
+
+    // Strip the one-shot OAuth params BEFORE setView writes ?view=, or the
+    // reset to "/app" would wipe the view param straight back out.
+    if (isOAuthReturn) window.history.replaceState({}, "", "/app");
+    setView(landOn);
     // Re-check recent posts against the platforms (deleted after publishing?
     // native-scheduled post gone live?) and refresh if anything changed.
     apiFetch("/api/posts/verify", { method: "POST" })
