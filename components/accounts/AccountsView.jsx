@@ -106,14 +106,25 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
     }
   }
 
+  // Publish health. `publishing_ok` is now set by real signals — a failed
+  // publish attributed to the account, or the CREATE_CONTENT probe in
+  // /api/accounts/sync — so "Reconnect needed" means the page genuinely can't
+  // post right now. metadata.auth_error carries Meta's own wording.
   function tokenHealth(a) {
-    if (a.publishing_ok === false) return { label: "Token issue", cls: "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400" };
+    const reason = a.metadata?.auth_error?.message || null;
+    if (a.publishing_ok === false) {
+      return {
+        label: "Reconnect needed",
+        reason,
+        cls: "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400",
+      };
+    }
     if (a.token_expires_at) {
       const days = (new Date(a.token_expires_at).getTime() - Date.now()) / 86400000;
-      if (days < 0) return { label: "Expired", cls: "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400" };
-      if (days < 7) return { label: `Expires ${Math.ceil(days)}d`, cls: "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400" };
+      if (days < 0) return { label: "Expired", reason, cls: "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400" };
+      if (days < 7) return { label: `Expires ${Math.ceil(days)}d`, reason, cls: "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400" };
     }
-    return { label: "Healthy", cls: "bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400" };
+    return { label: "Healthy", reason: null, cls: "bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400" };
   }
 
   // ── derived data ─────────────────────────────────────────────────────────
@@ -130,10 +141,16 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
           fbUserId: key,
           name: via?.fb_user_name || "Earlier connection",
           avatar: via?.avatar || null,
-          pages: []
+          pages: [],
+          broken: []
         };
       }
       map[key].pages.push(a);
+      // Meta restrictions and revoked sessions attach to the GRANTOR, so when a
+      // token dies every page that account granted usually dies together.
+      // Counting them here is what turns "one page mysteriously fails" into
+      // "this Facebook account needs re-authing".
+      if (a.publishing_ok === false) map[key].broken.push(a);
     }
     return Object.values(map);
   }, [accounts]);
@@ -278,7 +295,25 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                     {src.pages.length} page{src.pages.length !== 1 ? "s" : ""}
                     {src.fbUserId === "legacy" && " · connected before account tracking"}
                   </p>
+                  {src.broken.length > 0 && (
+                    <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">
+                      {src.broken.length} of {src.pages.length} can&apos;t publish
+                      {src.broken.length === src.pages.length && src.pages.length > 1
+                        ? " — this Facebook account's access has lapsed; reconnect it"
+                        : " — reconnect to restore"}
+                    </p>
+                  )}
                 </div>
+                {canManageAccounts && src.broken.length > 0 && (
+                  <button
+                    onClick={() => onConnectFacebook(true)}
+                    disabled={connectBusy}
+                    className="rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/10 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors disabled:opacity-50"
+                    title={`Sign in as ${src.name} again to mint fresh page tokens`}
+                  >
+                    Reconnect
+                  </button>
+                )}
                 {canManageAccounts && (
                   <button
                     onClick={() => disconnectSourceAccount(src.fbUserId, src.name, src.pages.length)}
@@ -423,7 +458,16 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                           {account.page_likes != null && <span>· {account.page_likes.toLocaleString()} likes</span>}
                         </p>
                       </div>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${health.cls}`} title={account.last_synced_at ? `Last sync ${new Date(account.last_synced_at).toLocaleString()}` : "Not synced yet"}>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${health.cls}`}
+                        title={
+                          health.reason
+                            ? `${health.reason}\n\nReconnecting this page usually clears it.`
+                            : account.last_synced_at
+                              ? `Last sync ${new Date(account.last_synced_at).toLocaleString()}`
+                              : "Not synced yet"
+                        }
+                      >
                         {health.label}
                       </span>
                       {canManageAccounts ? (
