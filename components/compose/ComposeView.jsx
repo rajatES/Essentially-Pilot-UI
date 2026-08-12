@@ -62,6 +62,10 @@ export default function ComposeView({ prefill, appSettings, me, templates, onNav
   }
 
   // First-comment with the post link auto-appended when the setting is on.
+  // The backend now applies this same policy for every write path (composer,
+  // Developer API, CSV) — see backend/src/lib/postFields.js. Kept here so the
+  // composer still behaves correctly against an older backend; the append is
+  // idempotent on both sides, so the link is never added twice.
   function effectiveFirstComment() {
     let fc = state.firstComment.trim();
     if (appSettings?.defaultLinkInFirstComment && state.linkUrl && !fc.includes(state.linkUrl)) {
