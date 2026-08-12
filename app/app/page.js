@@ -53,6 +53,23 @@ const NAV = [
 
 const NAV_IDS = new Set(NAV.map((n) => n.id));
 
+// Keep in lockstep with FACEBOOK_SCOPES in backend auth.controller.ts and with
+// the permissions enabled on the Meta app (HANDOFF §13). Requesting a
+// permission the app does not have enabled makes Meta reject the whole login
+// with "Invalid Scopes", which surfaces as a login that never connects.
+const FACEBOOK_SCOPES = [
+  "pages_show_list",
+  "pages_read_engagement",
+  "pages_manage_posts",
+  "pages_manage_engagement",
+  "read_insights",
+  "business_management",
+  "instagram_basic",
+  "instagram_content_publish",
+  "instagram_manage_comments",
+  "instagram_manage_insights",
+];
+
 // The shell keeps the active view in the URL (?view=calendar) so a browser
 // refresh comes back to where you were instead of bouncing to the dashboard.
 // Unknown/absent values fall back to the dashboard, so a hand-edited or stale
@@ -246,11 +263,32 @@ function AppShell() {
     }
 
     const callback = (response) => {
-      if (response.status !== "connected" || !response.authResponse?.accessToken) {
-        showToast("Facebook login was cancelled or denied.", "error");
+      if (response?.status === "connected" && response.authResponse?.accessToken) {
+        // return_scopes lets us tell "connected but the user unticked a
+        // permission" apart from a clean grant — a partial grant is the usual
+        // reason Pages come back empty or publishing fails later.
+        const granted = (response.authResponse.grantedScopes || "").split(",").filter(Boolean);
+        const missing = granted.length ? FACEBOOK_SCOPES.filter((s) => !granted.includes(s)) : [];
+        if (missing.length) {
+          showToast(`Connected, but Facebook withheld: ${missing.join(", ")}. Re-run connect and leave every permission ticked.`, "warn");
+        }
+        fetchFacebookPages(response.authResponse.accessToken, mode);
         return;
       }
-      fetchFacebookPages(response.authResponse.accessToken, mode);
+
+      // Everything below is a failed login. The SDK does not hand us Meta's
+      // error text (it is rendered inside the popup, which has already
+      // closed), but the status tells us which class of failure it was — and
+      // "unknown" is almost never a real cancellation.
+      console.warn("[facebook] login did not connect", response);
+      if (response?.status === "not_authorized") {
+        showToast("You're signed in to Facebook but didn't authorise Essentially Pilot. Run connect again and accept the permission screen.", "error");
+      } else {
+        showToast(
+          "Facebook never returned a login. Either the popup was closed/blocked, or Meta rejected the request — the popup shows the reason. Common causes: this Facebook account has no role on the app (Dev mode), or the app is missing one of the requested permissions.",
+          "error"
+        );
+      }
     };
 
     // Two login modes depending on how the Meta app is set up:
@@ -274,18 +312,7 @@ function AppShell() {
       // Classic Facebook Login: request permissions directly. Must match the
       // permissions the app is approved for. instagram_* back IG publishing/
       // comments/insights; read_insights backs the FB post-metrics sync.
-      scope: [
-        "pages_show_list",
-        "pages_read_engagement",
-        "pages_manage_posts",
-        "pages_manage_engagement",
-        "read_insights",
-        "business_management",
-        "instagram_basic",
-        "instagram_content_publish",
-        "instagram_manage_comments",
-        "instagram_manage_insights",
-      ].join(","),
+      scope: FACEBOOK_SCOPES.join(","),
       return_scopes: true,
       // "rerequest" forces the permission + page-selection screen every time
       // so the "opt in to your Pages" step can't be skipped (fixes 0-pages).
