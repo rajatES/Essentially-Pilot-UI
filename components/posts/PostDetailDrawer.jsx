@@ -256,7 +256,9 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">Target pages</p>
               <div className="space-y-2">
                 {(post.post_targets || []).map((t) => {
-                  const url = externalPostUrl(t.social_accounts?.platform || t.platform, t.external_post_id);
+                  // t.permalink is set for postiz-backed targets (Threads /
+                  // personal Instagram), which have no id-derivable URL.
+                  const url = externalPostUrl(t.social_accounts?.platform || t.platform, t.external_post_id, t.permalink);
                   return (
                     <div key={t.id} className="flex items-center gap-2 rounded-lg border border-slate-100 dark:border-gray-800 p-2.5">
                       <PlatformIcon platform={t.social_accounts?.platform || t.platform} size={15} />

@@ -227,7 +227,7 @@ export default function PostAnalyticsView() {
     for (const r of filtered) {
       const idVals = [
         r.page, r.platform, contentLabel(r), r.title,
-        (r.externalPostId && externalPostUrl(r.platform, r.externalPostId)) || "",
+        (r.externalPostId && externalPostUrl(r.platform, r.externalPostId, r.permalink)) || "",
       ];
       const metricVals = cols.map((c) => {
         const v = cellValue(r, c.key);
@@ -612,7 +612,7 @@ function renderMetric(row, col) {
 // Fixed identity block: thumbnail + platform badge, caption, and a
 // type · page sub-line — plus the per-row View / ⋯ actions.
 function TitleCell({ row }) {
-  const url = row.externalPostId ? externalPostUrl(row.platform, row.externalPostId) : null;
+  const url = row.externalPostId ? externalPostUrl(row.platform, row.externalPostId, row.permalink) : null;
   const TIcon = TYPE_ICON[row.postType] || FileText;
   return (
     <div className="flex items-center gap-3">
@@ -706,7 +706,7 @@ function PostGrid({ rows }) {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {rows.map((r) => {
         const m = r.metrics || {};
-        const url = r.externalPostId ? externalPostUrl(r.platform, r.externalPostId) : null;
+        const url = r.externalPostId ? externalPostUrl(r.platform, r.externalPostId, r.permalink) : null;
         const isVideo = r.postType === "video" || r.platformOptions?.[r.platform]?.format === "reel";
         return (
           <div key={r.rowId}

@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Facebook, Instagram, Youtube, MessageCircle, Twitter } from "lucide-react";
 import { apiUrl } from "@/lib/apiClient";
+import PostizImportModal from "./PostizImportModal";
 
 // onConnectMeta(switchAccount) — opens the Facebook JS-SDK popup flow (page
 // selection + per-account tracking) for the combined Facebook+Instagram
@@ -16,6 +18,10 @@ import { apiUrl } from "@/lib/apiClient";
 // channel is open to everyone, but Facebook Pages/X/Threads connect and page
 // management stay admin/Group-Head only.
 export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram, canManageAccounts = true }) {
+  // Threads and personal Instagram are imported from Postiz rather than
+  // connected here — Postiz runs their OAuth, we just copy the channel.
+  const [showPostiz, setShowPostiz] = useState(false);
+
   const platforms = [
     {
       id: "facebook",
@@ -60,9 +66,22 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
       name: "Threads",
       icon: MessageCircle,
       color: "bg-slate-50 text-slate-800 border-slate-200 dark:bg-gray-800/50 dark:text-white dark:border-gray-700",
-      connectUrl: apiUrl("/api/auth/threads/start"),
-      buttonText: "Connect Profile",
-      description: "Sign in with the Threads profile you post from — Threads uses its own login, separate from Facebook"
+      // Meta's Threads API needs its own app and review, which we never
+      // completed — Postiz holds that authorization instead.
+      onClick: () => setShowPostiz(true),
+      buttonText: "Import from Postiz",
+      description: "Connect the Threads profile in Postiz, then import it here — Postiz handles the Threads login"
+    },
+    {
+      id: "instagram-personal",
+      name: "Instagram (personal)",
+      icon: Instagram,
+      color: "bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/30",
+      // The Meta tile above can only reach Business/Creator accounts linked to
+      // a Page. A personal profile has no Page to link, so it comes via Postiz.
+      onClick: () => setShowPostiz(true),
+      buttonText: "Import from Postiz",
+      description: "For profiles with no linked Facebook Page — connect in Postiz, then import it here"
     }
   ];
 
@@ -148,7 +167,7 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
               <li>• <strong>Multiple accounts:</strong> Pages from different Facebook accounts can be connected side by side — use “Connect a different account” to sign in as another user.</li>
               <li>• <strong>Development mode:</strong> every Facebook account used to connect must be added as a Tester under App Roles in the Meta developer dashboard.</li>
               <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels.</li>
-              <li>• <strong>Threads:</strong> Uses its own Threads login (not Facebook) — each Threads profile connects individually and posts publish via the queue at the scheduled time.</li>
+              <li>• <strong>Threads & personal Instagram:</strong> Published through Postiz. Authorize the profile once in Postiz, then import the channel here — after that it behaves like any other account (same composer, queue and approvals). Personal Instagram is the only route for profiles with no linked Facebook Page.</li>
             </>
           ) : (
             <>
@@ -158,6 +177,8 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
           )}
         </ul>
       </div>
+
+      {showPostiz && <PostizImportModal onClose={() => setShowPostiz(false)} />}
     </div>
   );
 }

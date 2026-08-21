@@ -454,6 +454,22 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                         <p className="font-medium text-slate-800 dark:text-white truncate">{account.display_name}</p>
                         <p className="flex items-center gap-2 text-xs text-slate-500 dark:text-gray-400">
                           {PLATFORM_META[account.platform]?.label || account.platform}
+                          {/* Which pipeline publishes here. Worth surfacing: a
+                              Postiz-backed Instagram row looks identical to a
+                              native one otherwise, but its token, its failure
+                              modes and its analytics all come from elsewhere. */}
+                          {account.publish_via === "postiz" && (
+                            <span
+                              className="rounded-full bg-violet-50 px-1.5 py-0.5 font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300"
+                              title={
+                                account.metadata?.postiz?.provider === "instagram-standalone"
+                                  ? "Personal Instagram — publishes through your Postiz workspace"
+                                  : "Publishes through your Postiz workspace"
+                              }
+                            >
+                              via Postiz
+                            </span>
+                          )}
                           {account.followers != null && <span>· {account.followers.toLocaleString()} followers</span>}
                           {account.page_likes != null && <span>· {account.page_likes.toLocaleString()} likes</span>}
                         </p>
@@ -463,9 +479,14 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                         title={
                           health.reason
                             ? `${health.reason}\n\nReconnecting this page usually clears it.`
-                            : account.last_synced_at
-                              ? `Last sync ${new Date(account.last_synced_at).toLocaleString()}`
-                              : "Not synced yet"
+                            : account.publish_via === "postiz"
+                              // Sync deliberately skips these (no token of ours
+                              // to probe), so "Not synced yet" would be a
+                              // permanent, meaningless state for them.
+                              ? "Postiz holds this channel's platform token and its health — Sync skips these rows."
+                              : account.last_synced_at
+                                ? `Last sync ${new Date(account.last_synced_at).toLocaleString()}`
+                                : "Not synced yet"
                         }
                       >
                         {health.label}
