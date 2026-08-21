@@ -57,9 +57,11 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
       name: "X (Twitter)",
       icon: Twitter,
       color: "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/30",
-      connectUrl: apiUrl("/api/auth/x/start"),
-      buttonText: "Connect Account",
-      description: "Sign in with the X account you post from — publishes via the queue at the scheduled time"
+      // Posting on X needs a paid API tier, so the native path never published.
+      // Postiz already holds a working X authorization.
+      onClick: () => setShowPostiz(true),
+      buttonText: "Import from Postiz",
+      description: "Connect the X account in Postiz, then import it here — no X developer app needed"
     },
     {
       id: "threads",
@@ -170,7 +172,7 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
               <li>• <strong>Multiple accounts:</strong> Pages from different Facebook accounts can be connected side by side — use “Connect a different account” to sign in as another user.</li>
               <li>• <strong>Development mode:</strong> every Facebook account used to connect must be added as a Tester under App Roles in the Meta developer dashboard.</li>
               <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels.</li>
-              <li>• <strong>Threads & Standalone Instagram:</strong> Published through Postiz. Authorize the account once in Postiz (Calendar → <em>Add Channel</em>), then import the channel here — after that it behaves like any other account (same composer, queue and approvals). Standalone Instagram is the only route for a Creator/Business account with no linked Facebook Page; a plain personal profile can&apos;t be published to by any API.</li>
+              <li>• <strong>Threads, X & Standalone Instagram:</strong> Published through Postiz. Authorize the account once in Postiz (Calendar → <em>Add Channel</em>), then import the channel here — after that it behaves like any other account (same composer, queue and approvals). Standalone Instagram is the only route for a Creator/Business account with no linked Facebook Page; a plain personal profile can&apos;t be published to by any API. X goes through Postiz because posting via X&apos;s own API needs a paid tier.</li>
             </>
           ) : (
             <>

@@ -22,6 +22,7 @@ const PROVIDER_LABEL = {
   threads: "Threads",
   instagram: "Instagram (via Facebook Page)",
   "instagram-standalone": "Instagram (Standalone — no Page)",
+  x: "X (Twitter)",
 };
 
 export default function PostizImportModal({ onClose }) {
@@ -93,7 +94,7 @@ export default function PostizImportModal({ onClose }) {
           <div>
             <p className="text-base font-bold text-slate-900 dark:text-white">Import Postiz channels</p>
             <p className="mt-0.5 text-sm text-slate-500 dark:text-gray-400">
-              Threads and Page-less Instagram accounts publish through your Postiz workspace.
+              Threads, X and Page-less Instagram accounts publish through your Postiz workspace.
             </p>
           </div>
           <button
