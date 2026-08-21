@@ -20,8 +20,8 @@ import { usePostsInvalidate } from "@/lib/queries";
 // "instagram" here, so the badge is the only place the difference is visible.
 const PROVIDER_LABEL = {
   threads: "Threads",
-  instagram: "Instagram (via Facebook)",
-  "instagram-standalone": "Instagram (personal)",
+  instagram: "Instagram (via Facebook Page)",
+  "instagram-standalone": "Instagram (Standalone — no Page)",
 };
 
 export default function PostizImportModal({ onClose }) {
@@ -93,7 +93,7 @@ export default function PostizImportModal({ onClose }) {
           <div>
             <p className="text-base font-bold text-slate-900 dark:text-white">Import Postiz channels</p>
             <p className="mt-0.5 text-sm text-slate-500 dark:text-gray-400">
-              Threads and personal Instagram profiles publish through your Postiz workspace.
+              Threads and Page-less Instagram accounts publish through your Postiz workspace.
             </p>
           </div>
           <button

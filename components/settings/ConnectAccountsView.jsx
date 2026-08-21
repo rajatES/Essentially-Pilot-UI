@@ -73,15 +73,18 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
       description: "Connect the Threads profile in Postiz, then import it here — Postiz handles the Threads login"
     },
     {
-      id: "instagram-personal",
-      name: "Instagram (personal)",
+      id: "instagram-standalone",
+      // Named to match Postiz's own channel picker ("Instagram (Standalone)")
+      // so the two screens line up while you're setting one up.
+      name: "Instagram (Standalone)",
       icon: Instagram,
       color: "bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/30",
-      // The Meta tile above can only reach Business/Creator accounts linked to
-      // a Page. A personal profile has no Page to link, so it comes via Postiz.
+      // The Meta tile above can only reach accounts linked to a Facebook Page.
+      // Standalone still needs a professional (Creator/Business) account — no
+      // API publishes to a plain personal profile — but no Page.
       onClick: () => setShowPostiz(true),
       buttonText: "Import from Postiz",
-      description: "For profiles with no linked Facebook Page — connect in Postiz, then import it here"
+      description: "Creator/Business accounts with NO linked Facebook Page — connect in Postiz, then import it here"
     }
   ];
 
@@ -167,7 +170,7 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
               <li>• <strong>Multiple accounts:</strong> Pages from different Facebook accounts can be connected side by side — use “Connect a different account” to sign in as another user.</li>
               <li>• <strong>Development mode:</strong> every Facebook account used to connect must be added as a Tester under App Roles in the Meta developer dashboard.</li>
               <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels.</li>
-              <li>• <strong>Threads & personal Instagram:</strong> Published through Postiz. Authorize the profile once in Postiz, then import the channel here — after that it behaves like any other account (same composer, queue and approvals). Personal Instagram is the only route for profiles with no linked Facebook Page.</li>
+              <li>• <strong>Threads & Standalone Instagram:</strong> Published through Postiz. Authorize the account once in Postiz (Calendar → <em>Add Channel</em>), then import the channel here — after that it behaves like any other account (same composer, queue and approvals). Standalone Instagram is the only route for a Creator/Business account with no linked Facebook Page; a plain personal profile can&apos;t be published to by any API.</li>
             </>
           ) : (
             <>

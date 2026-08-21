@@ -463,7 +463,7 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                               className="rounded-full bg-violet-50 px-1.5 py-0.5 font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300"
                               title={
                                 account.metadata?.postiz?.provider === "instagram-standalone"
-                                  ? "Personal Instagram — publishes through your Postiz workspace"
+                                  ? "Standalone Instagram (no linked Facebook Page) — publishes through your Postiz workspace"
                                   : "Publishes through your Postiz workspace"
                               }
                             >
