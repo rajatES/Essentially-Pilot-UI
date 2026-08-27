@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertCircle, ExternalLink, FileText, MessageSquare, Tag, X } from "lucide-react";
+import { AlertCircle, ExternalLink, FileText, Hash, MessageSquare, Tag, X } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import { useToast } from "@/components/common/ToastProvider";
 import { usePostsData, usePostsInvalidate } from "@/lib/queries";
@@ -61,6 +61,20 @@ export default function ComposeView({ prefill, appSettings, me, templates, onNav
     });
   }
 
+  // Mirror of backend normalizeTags() (lib/postFields.js) so the chips below show
+  // exactly what will be stored — trimmed, lowercased, "#" stripped, de-duped.
+  // Kept deliberately in step with that function; the backend remains the
+  // authority, this is only the preview.
+  const tagPreview = useMemo(() => {
+    const out = [];
+    for (const raw of String(state.tags || "").split(",")) {
+      const t = raw.trim().replace(/^#+/, "").trim().toLowerCase().slice(0, 40);
+      if (t && !out.includes(t)) out.push(t);
+      if (out.length >= 20) break;
+    }
+    return out;
+  }, [state.tags]);
+
   // First-comment with the post link auto-appended when the setting is on.
   // The backend now applies this same policy for every write path (composer,
   // Developer API, CSV) — see backend/src/lib/postFields.js. Kept here so the
@@ -100,6 +114,7 @@ export default function ComposeView({ prefill, appSettings, me, templates, onNav
       linkUrl: state.linkUrl || null,
       socialAccountIds: state.selectedIds,
       contentType: state.contentType || null,
+      tags: tagPreview,
       templateId: state.templateId || null,
       firstComment: effectiveFirstComment(),
       ...platformPayload(),
@@ -214,6 +229,35 @@ export default function ComposeView({ prefill, appSettings, me, templates, onNav
               <option value="lic">LIC</option>
             </select>
           </div>
+
+          {/* Editorial tags — free-form, per POST (the account's sport lives on
+              the account and is admin-only, so this is the only way an author
+              can label an individual post). Comma-separated; the backend trims,
+              lowercases, strips a leading "#" and de-duplicates. */}
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-gray-800 px-3 py-2.5">
+            <Hash size={15} className="shrink-0 text-slate-400 dark:text-gray-500" />
+            <input
+              type="text"
+              value={state.tags}
+              onChange={(e) => update({ tags: e.target.value })}
+              placeholder="Tags — comma separated (e.g. nascar, daytona)"
+              className="flex-1 bg-transparent text-sm text-slate-800 dark:text-gray-100 placeholder:text-slate-400 dark:placeholder:text-gray-500 outline-none"
+            />
+            {state.tags?.trim() && (
+              <button type="button" onClick={() => update({ tags: "" })} className="text-slate-400 dark:text-gray-500 hover:text-red-500" title="Clear tags">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {tagPreview.length > 0 && (
+            <div className="-mt-1 flex flex-wrap gap-1.5">
+              {tagPreview.map((t) => (
+                <span key={t} className="rounded-full bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                  #{t}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Template picker */}
           {templates.length > 0 && (

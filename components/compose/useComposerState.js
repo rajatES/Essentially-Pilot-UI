@@ -20,6 +20,10 @@ export default function useComposerState({ prefill, appSettings, accounts }) {
       linkUrl: src?.link_url || "",
       firstComment: src?.first_comment || appSettings?.defaultFirstComment || "",
       contentType: src?.content_type || "",
+      // Free-form editorial tags, held as the raw comma-separated string the
+      // user is typing (not an array) so a half-typed "nasc" doesn't become a
+      // tag mid-keystroke. Split on submit; the backend normalizes either form.
+      tags: Array.isArray(src?.tags) ? src.tags.join(", ") : "",
       templateId: prefill?.templateId || "",
       scheduledFor: prefill?.scheduledFor || "",
       platformOptions: src?.platform_options || {},
