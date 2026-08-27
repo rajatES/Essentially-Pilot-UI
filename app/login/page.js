@@ -116,8 +116,9 @@ export default function LoginPage() {
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
             <LogIn size={22} />
           </div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">SocialPilot</p>
-          <h1 className="text-lg font-bold text-slate-800 dark:text-white">Scheduler</h1>
+          {/* Was an eyebrow reading "SocialPilot" — a competitor's name, left
+              over from the UI clone this shell was modelled on. */}
+          <h1 className="text-lg font-bold text-slate-800 dark:text-white">ES Social Post</h1>
         </div>
 
         {!hasAdmin ? (

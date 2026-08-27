@@ -10,7 +10,7 @@ export default function LegalPage({ title, updated, children }) {
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">ES</div>
-            <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">Posting Pilot</span>
+            <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">ES Social Post</span>
           </Link>
           <nav className="flex gap-4 text-sm font-medium text-slate-500 dark:text-gray-400">
             <Link href="/privacy" className="hover:text-indigo-600 dark:hover:text-indigo-400">Privacy</Link>

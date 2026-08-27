@@ -470,6 +470,20 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                               via Postiz
                             </span>
                           )}
+                          {/* Both native Instagram paths are publish_via
+                              "native" with platform "instagram", so this badge
+                              is the only place you can tell WHICH one an
+                              account came through — which matters the moment a
+                              token goes bad, because the fix differs (reconnect
+                              via Facebook vs via Instagram). */}
+                          {account.publish_via !== "postiz" && account.metadata?.instagram?.login === "instagram" && (
+                            <span
+                              className="rounded-full bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700 dark:bg-purple-500/10 dark:text-purple-300"
+                              title="Connected directly with Instagram — no Facebook Page involved. Its 60-day token is auto-refreshed daily."
+                            >
+                              direct
+                            </span>
+                          )}
                           {account.followers != null && <span>· {account.followers.toLocaleString()} followers</span>}
                           {account.page_likes != null && <span>· {account.page_likes.toLocaleString()} likes</span>}
                         </p>

@@ -1,8 +1,8 @@
 import LegalPage from "@/components/legal/LegalPage";
 
 export const metadata = {
-  title: "Terms of Service — ES Posting Pilot",
-  description: "Terms governing use of the ES Posting Pilot social media scheduling tool."
+  title: "Terms of Service — ES Social Post",
+  description: "Terms governing use of the ES Social Post social media scheduling tool."
 };
 
 const COMPANY = "EssentiallySports";
@@ -12,7 +12,7 @@ export default function Terms() {
   return (
     <LegalPage title="Terms of Service" updated="21 July 2026">
       <p>
-        These terms govern use of ES Posting Pilot (&ldquo;the Service&rdquo;), an internal social media
+        These terms govern use of ES Social Post (&ldquo;the Service&rdquo;), an internal social media
         scheduling and publishing tool operated by {COMPANY}. By using the Service you agree to them.
       </p>
 

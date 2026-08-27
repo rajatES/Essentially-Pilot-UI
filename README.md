@@ -1,6 +1,6 @@
-# Essentially PostingPilot — Frontend (Next.js)
+# ES Social Post — Frontend (Next.js)
 
-The UI for PostingPilot. This is now a **pure frontend** — it renders the app and
+The UI for ES Social Post. This is now a **pure frontend** — it renders the app and
 talks to the standalone NestJS backend over HTTP. There are no `app/api` routes
 here anymore.
 

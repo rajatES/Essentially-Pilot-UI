@@ -5,8 +5,8 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata = {
-  title: "EssentiallySports Scheduler",
-  description: "Schedule and publish posts to your Facebook Pages"
+  title: "ES Social Post",
+  description: "Schedule and publish posts to Facebook, Instagram, Threads, X and YouTube"
 };
 
 // Apply the saved theme before first paint so dark mode never flashes light.

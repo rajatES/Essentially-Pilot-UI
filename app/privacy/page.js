@@ -1,8 +1,8 @@
 import LegalPage from "@/components/legal/LegalPage";
 
 export const metadata = {
-  title: "Privacy Policy — ES Posting Pilot",
-  description: "How ES Posting Pilot collects, uses, stores, and deletes data, including data obtained from Meta, Google, and X platforms."
+  title: "Privacy Policy — ES Social Post",
+  description: "How ES Social Post collects, uses, stores, and deletes data, including data obtained from Meta, Google, and X platforms."
 };
 
 const COMPANY = "EssentiallySports";
@@ -12,7 +12,7 @@ export default function PrivacyPolicy() {
   return (
     <LegalPage title="Privacy Policy" updated="21 July 2026">
       <p>
-        ES Posting Pilot (&ldquo;the Service&rdquo;) is an internal social media scheduling and publishing
+        ES Social Post (&ldquo;the Service&rdquo;) is an internal social media scheduling and publishing
         tool operated by {COMPANY}. This policy explains what data the Service collects, why, how long
         it is kept, and how to have it deleted.
       </p>

@@ -75,26 +75,31 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
       description: "Connect the Threads profile in Postiz, then import it here — Postiz handles the Threads login"
     },
     {
-      id: "instagram-standalone",
-      // Named to match Postiz's own channel picker ("Instagram (Standalone)")
-      // so the two screens line up while you're setting one up.
-      name: "Instagram (Standalone)",
+      id: "instagram-direct",
+      name: "Instagram (Direct)",
       icon: Instagram,
       color: "bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/30",
-      // The Meta tile above can only reach accounts linked to a Facebook Page.
-      // Standalone still needs a professional (Creator/Business) account — no
-      // API publishes to a plain personal profile — but no Page.
-      onClick: () => setShowPostiz(true),
-      buttonText: "Import from Postiz",
-      description: "Creator/Business accounts with NO linked Facebook Page — connect in Postiz, then import it here"
+      // Our own OAuth against instagram.com — no Facebook account, no Page, no
+      // Postiz. Was "Import from Postiz" until the native Instagram-Login path
+      // landed; a plain server redirect, so it's an <a href> like YouTube
+      // rather than a JS-SDK popup.
+      //
+      // Still needs a professional (Creator/Business) account: no API publishes
+      // to a plain personal profile. The callback checks account_type and says
+      // so by name rather than letting the first post fail.
+      connectUrl: apiUrl("/api/auth/instagram/start"),
+      buttonText: "Sign in with Instagram",
+      description: "Sign in with Instagram itself — no Facebook Page or Facebook account needed (Creator/Business)"
     }
   ];
 
   // Members without account-management rights can still connect Instagram
-  // and YouTube.
+  // and YouTube. Direct Instagram is included: it carries its own token and
+  // touches no Facebook Page, so it's the same class of action as the
+  // Page-linked Instagram tile that was opened to everyone on 2026-08-05.
   const visiblePlatforms = canManageAccounts
     ? platforms
-    : platforms.filter((p) => p.id === "instagram" || p.id === "youtube");
+    : platforms.filter((p) => ["instagram", "instagram-direct", "youtube"].includes(p.id));
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
@@ -172,10 +177,12 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
               <li>• <strong>Multiple accounts:</strong> Pages from different Facebook accounts can be connected side by side — use “Connect a different account” to sign in as another user.</li>
               <li>• <strong>Development mode:</strong> every Facebook account used to connect must be added as a Tester under App Roles in the Meta developer dashboard.</li>
               <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels.</li>
-              <li>• <strong>Threads, X & Standalone Instagram:</strong> Published through Postiz. Authorize the account once in Postiz (Calendar → <em>Add Channel</em>), then import the channel here — after that it behaves like any other account (same composer, queue and approvals). Standalone Instagram is the only route for a Creator/Business account with no linked Facebook Page; a plain personal profile can&apos;t be published to by any API. X goes through Postiz because posting via X&apos;s own API needs a paid tier.</li>
+              <li>• <strong>Instagram (Direct):</strong> Sign in with Instagram itself — no Facebook account, Page or Business Portfolio anywhere in the flow. Use this for any account that isn&apos;t linked to a Page, and prefer it when you have the choice: the token is ours, so insights and first comments work the same as Facebook-linked accounts. The account must be a <strong>Creator or Business</strong> account — no API can publish to a plain personal profile, so switch it in the Instagram app (Settings → Account type and tools) first; it&apos;s free and reversible.</li>
+              <li>• <strong>Threads & X:</strong> Published through Postiz. Authorize the account once in Postiz (Calendar → <em>Add Channel</em>), then import the channel here — after that it behaves like any other account (same composer, queue and approvals). X goes through Postiz because posting via X&apos;s own API needs a paid tier.</li>
             </>
           ) : (
             <>
+              <li>• <strong>Instagram (Direct):</strong> Sign in with Instagram itself — no Facebook needed. The account must be a Creator or Business account (switch it free in the Instagram app under Settings → Account type and tools). It becomes available to everyone in the workspace.</li>
               <li>• <strong>Instagram:</strong> Connect an Instagram Business/Creator account linked to a Facebook Page — you'll sign in with Facebook, but only the Instagram account is connected (no Facebook Page is added). It becomes available to everyone in the workspace.</li>
               <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels. The channel becomes available to everyone in the workspace.</li>
             </>

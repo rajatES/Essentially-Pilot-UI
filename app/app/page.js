@@ -7,7 +7,7 @@ import {
   CheckCircle2, LayoutDashboard, Settings as SettingsIcon,
   TrendingUp, Palette, Webhook, BarChart3, ShieldCheck
 } from "lucide-react";
-import { apiFetch, apiJson, getToken, clearToken } from "@/lib/apiClient";
+import { apiFetch, apiJson, apiUrl, getToken, clearToken } from "@/lib/apiClient";
 import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
 import { usePostsData, usePostsInvalidate, usePendingApprovals } from "@/lib/queries";
 import ToastProvider, { useToast } from "@/components/common/ToastProvider";
@@ -282,11 +282,25 @@ function AppShell() {
       // "unknown" is almost never a real cancellation.
       console.warn("[facebook] login did not connect", response);
       if (response?.status === "not_authorized") {
-        showToast("You're signed in to Facebook but didn't authorise Essentially Pilot. Run connect again and accept the permission screen.", "error");
+        showToast("You're signed in to Facebook but didn't authorise ES Social Post. Run connect again and accept the permission screen.", "error");
       } else {
+        // The SDK genuinely cannot tell us Meta's reason here, so instead of
+        // guessing at causes, hand the user the flow that CAN: the redirect
+        // pair puts Meta's own wording, error_reason and error_code in the
+        // query string, and the callback forwards all three. "Meta declined /
+        // app unavailable" for a user who is not an app role-holder is almost
+        // always Standard Access on the permissions — Live mode alone does not
+        // cover non-role users. See HANDOFF §13.
         showToast(
-          "Facebook never returned a login. Either the popup was closed/blocked, or Meta rejected the request — the popup shows the reason. Common causes: this Facebook account has no role on the app (Dev mode), or the app is missing one of the requested permissions.",
+          "Facebook didn't return a login — the popup can't tell us why. Open the link in this message to retry via the redirect flow, which reports Meta's actual reason.",
           "error"
+        );
+        console.warn(
+          "[facebook] To see Meta's real refusal, open this directly:\n  " +
+            apiUrl("/api/auth/facebook/start") +
+            "\nIf it says the app is unavailable or restricted for this user, the permissions are still on " +
+            "Standard Access (App Review -> Permissions and Features): Standard works ONLY for users with a " +
+            "role on the app, regardless of Live mode. Run backend/scripts/meta-app-diagnose.mjs for the full checklist."
         );
       }
     };
@@ -420,10 +434,10 @@ function AppShell() {
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
             <Send size={18} />
           </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">EssentiallySports</span>
-            <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">Scheduler</span>
-          </div>
+          {/* One name, not a parent/product stack: the "ES" in "ES Social Post"
+              already carries EssentiallySports, so the old eyebrow above it
+              read as a repetition of the same word. */}
+          <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">ES Social Post</span>
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-4">
