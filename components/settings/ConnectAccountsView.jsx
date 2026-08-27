@@ -18,8 +18,16 @@ import PostizImportModal from "./PostizImportModal";
 // channel is open to everyone, but Facebook Pages/X/Threads connect and page
 // management stay admin/Group-Head only.
 export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram, canManageAccounts = true }) {
-  // Threads and personal Instagram are imported from Postiz rather than
+  // Threads, X and Postiz-held Instagram channels are imported rather than
   // connected here — Postiz runs their OAuth, we just copy the channel.
+  //
+  // Instagram has THREE tiles on purpose, all landing on platform "instagram":
+  //   instagram         — via a linked Facebook Page (JS-SDK popup)
+  //   instagram-direct   — our own OAuth on instagram.com, no Facebook at all
+  //   instagram-postiz   — adopt a channel already authorized inside Postiz
+  // They are alternative front doors, not duplicates: `publish_via` on the saved
+  // row decides which pipeline publishes, so the choice made at connect time is
+  // what a post follows later.
   const [showPostiz, setShowPostiz] = useState(false);
 
   const platforms = [
@@ -90,6 +98,23 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
       connectUrl: apiUrl("/api/auth/instagram/start"),
       buttonText: "Sign in with Instagram",
       description: "Sign in with Instagram itself — no Facebook Page or Facebook account needed (Creator/Business)"
+    },
+    {
+      id: "instagram-postiz",
+      // Named to match Postiz's own channel picker ("Instagram (Standalone)")
+      // so the two screens line up while you're setting one up.
+      name: "Instagram (via Postiz)",
+      icon: Instagram,
+      color: "bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-500/10 dark:text-violet-400 dark:border-violet-500/30",
+      // Kept alongside the direct tile ON PURPOSE (2026-08-27). The direct path
+      // superseded this one for NEW accounts, but this route still works and is
+      // the only way to adopt a channel that is already authorized inside
+      // Postiz — re-authorizing it here would mean disconnecting it there.
+      // Any already-imported row keeps publishing through Postiz regardless of
+      // which tile it came from; `publish_via` on the row is what decides.
+      onClick: () => setShowPostiz(true),
+      buttonText: "Import from Postiz",
+      description: "Already authorized in Postiz? Import the channel instead of reconnecting it here (admin only)"
     }
   ];
 
@@ -178,6 +203,8 @@ export default function ConnectAccountsView({ onConnectMeta, onConnectInstagram,
               <li>• <strong>Development mode:</strong> every Facebook account used to connect must be added as a Tester under App Roles in the Meta developer dashboard.</li>
               <li>• <strong>YouTube:</strong> Connect your Google account to schedule videos to your channels.</li>
               <li>• <strong>Instagram (Direct):</strong> Sign in with Instagram itself — no Facebook account, Page or Business Portfolio anywhere in the flow. Use this for any account that isn&apos;t linked to a Page, and prefer it when you have the choice: the token is ours, so insights and first comments work the same as Facebook-linked accounts. The account must be a <strong>Creator or Business</strong> account — no API can publish to a plain personal profile, so switch it in the Instagram app (Settings → Account type and tools) first; it&apos;s free and reversible.</li>
+              <li>• <strong>Instagram (via Postiz):</strong> The same Instagram account can also be reached through Postiz, and that route is still here — use it when the channel is <em>already</em> authorized in your Postiz workspace, since reconnecting it directly would mean disconnecting it there. Prefer <strong>Instagram (Direct)</strong> for anything new: the token is ours, so insights and first comments behave like the Facebook-linked accounts, and it&apos;s open to every member rather than admins only.</li>
+              <li>• <strong>Three Instagram routes, one platform:</strong> however an account is connected it appears once in the composer and publishes the same way. The row&apos;s publish_via decides which pipeline runs, so an account imported from Postiz keeps going through Postiz even after the direct tile exists.</li>
               <li>• <strong>Threads & X:</strong> Published through Postiz. Authorize the account once in Postiz (Calendar → <em>Add Channel</em>), then import the channel here — after that it behaves like any other account (same composer, queue and approvals). X goes through Postiz because posting via X&apos;s own API needs a paid tier.</li>
             </>
           ) : (
