@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Facebook, Filter, Link as LinkIcon, Plus, RefreshCw, Search, Tag, Trash2, X } from "lucide-react";
+import { Facebook, Filter, Link as LinkIcon, Lock, LockOpen, Plus, RefreshCw, Search, Tag, Trash2, X } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
@@ -25,6 +25,7 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
   const [acctSearch, setAcctSearch] = useState("");
   const [acctSport, setAcctSport] = useState("all");
   const [acctPlatform, setAcctPlatform] = useState("all");
+  const [onlyLocked, setOnlyLocked] = useState(false);
   const [selectedAccts, setSelectedAccts] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [showManageSports, setShowManageSports] = useState(false);
@@ -87,13 +88,42 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
   async function bulkAccount(action, value) {
     if (!selectedAccts.length) { showToast("Select accounts first.", "warn"); return; }
     if (action === "disconnect" && !confirm(`Disconnect ${selectedAccts.length} account(s)?`)) return;
+    if (action === "lock" && value === true && !confirm(`Lock ${selectedAccts.length} page(s)? Nobody will be able to post to them — they stay connected and keep reporting analytics.`)) return;
     try {
-      await apiJson("/api/accounts/bulk", { method: "POST", body: JSON.stringify({ action, ids: selectedAccts, value }) });
+      const r = await apiJson("/api/accounts/bulk", { method: "POST", body: JSON.stringify({ action, ids: selectedAccts, value }) });
       setSelectedAccts([]);
-      showToast("Bulk action applied.");
+      showToast(queuedNote(r?.queuedAffected) || "Bulk action applied.", r?.queuedAffected ? "warn" : "ok");
       invalidatePosts();
     } catch (e) {
       showToast(e.message, "error");
+    }
+  }
+
+  // Locking leaves already-queued posts alone — they stay scheduled and fail at
+  // send time. The API reports how many, so the admin can go retarget or delete
+  // them instead of finding out from a failure notification tomorrow.
+  const queuedNote = (n) =>
+    n ? `Locked. ${n} already-scheduled post${n === 1 ? "" : "s"} will now fail — retarget or delete ${n === 1 ? "it" : "them"} in Posts.` : "";
+
+  // Lock / unlock a page. Deliberately separate from disconnect: the row, its
+  // token, its insights and its post history all stay — only publishing is
+  // refused, so a locked page still shows up everywhere analytics do.
+  async function setLocked(account, locked) {
+    if (locked && !confirm(`Lock "${account.display_name}"? Nobody will be able to post to it — it stays connected and keeps reporting analytics.`)) return;
+    try {
+      const r = await apiJson(`/api/accounts/${account.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ locked }),
+      });
+      showToast(
+        locked
+          ? queuedNote(r?.queuedAffected) || `${account.display_name} locked — posting is off.`
+          : `${account.display_name} unlocked.`,
+        locked ? "warn" : "ok",
+      );
+      invalidatePosts();
+    } catch (err) {
+      showToast(err.message, "error");
     }
   }
 
@@ -161,9 +191,12 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
       const matchesText = !q || a.display_name?.toLowerCase().includes(q);
       const matchesSport = acctSport === "all" || (a.category || "Other") === acctSport;
       const matchesPlatform = acctPlatform === "all" || a.platform === acctPlatform;
-      return matchesText && matchesSport && matchesPlatform;
+      const matchesLocked = !onlyLocked || a.posting_locked === true;
+      return matchesText && matchesSport && matchesPlatform && matchesLocked;
     });
-  }, [accounts, acctSearch, acctSport, acctPlatform]);
+  }, [accounts, acctSearch, acctSport, acctPlatform, onlyLocked]);
+
+  const lockedCount = useMemo(() => accounts.filter((a) => a.posting_locked === true).length, [accounts]);
 
   const platformCounts = useMemo(() => {
     const counts = {};
@@ -398,6 +431,19 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                 ))}
               </select>
             </div>
+            {/* Only rendered when something IS locked — an always-present
+                "0 locked" chip is noise on a workspace that never locks. */}
+            {lockedCount > 0 && (
+              <button
+                onClick={() => setOnlyLocked((v) => !v)}
+                title={onlyLocked ? "Show all pages again" : "Show only locked pages"}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm font-medium ${onlyLocked
+                  ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                  : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800"}`}
+              >
+                <Lock size={13} /> Locked ({lockedCount})
+              </button>
+            )}
           </div>
 
           {/* Bulk action bar */}
@@ -412,6 +458,12 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                     <option value="" disabled>Set sport…</option>
                     {sportOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
+                  <button onClick={() => bulkAccount("lock", true)} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 dark:border-amber-500/30 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10" title="Stop anyone posting to these pages — they stay connected and keep reporting analytics">
+                    <Lock size={12} /> Lock
+                  </button>
+                  <button onClick={() => bulkAccount("lock", false)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-slate-600 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-gray-800">
+                    <LockOpen size={12} /> Unlock
+                  </button>
                   <button onClick={() => bulkAccount("disconnect")} className="rounded-lg border border-red-200 dark:border-red-500/30 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10">Disconnect</button>
                 </>
               )}
@@ -422,7 +474,7 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
           {/* Platform groups */}
           {Object.keys(accountsByPlatform).length === 0 ? (
             <p className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 text-center text-sm text-slate-500 dark:text-gray-400 shadow-sm">
-              No pages match your filter.
+              {onlyLocked ? "No locked pages match your filter." : "No pages match your filter."}
             </p>
           ) : (
             PLATFORM_ORDER.filter((p) => accountsByPlatform[p]).map((platform) => (
@@ -436,6 +488,7 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                 <div className="divide-y divide-slate-100 dark:divide-gray-800">
                   {accountsByPlatform[platform].map((account) => {
                     const health = tokenHealth(account);
+                    const locked = account.posting_locked === true;
                     return (
                     <div key={account.id} className="flex items-center gap-3 px-4 py-3">
                       <input
@@ -484,6 +537,14 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                               direct
                             </span>
                           )}
+                          {locked && (
+                            <span
+                              className="flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                              title="Locked — nobody can post to this page. It stays connected: followers, insights and post analytics keep updating."
+                            >
+                              <Lock size={9} /> Locked
+                            </span>
+                          )}
                           {account.followers != null && <span>· {account.followers.toLocaleString()} followers</span>}
                           {account.page_likes != null && <span>· {account.page_likes.toLocaleString()} likes</span>}
                         </p>
@@ -516,6 +577,17 @@ export default function AccountsView({ me, canManageAccounts, onConnectFacebook,
                         </select>
                       ) : (
                         <span className="rounded-full bg-slate-100 dark:bg-gray-800 px-2 py-0.5 text-xs font-medium text-slate-500 dark:text-gray-400">{account.category || "Other"}</span>
+                      )}
+                      {canManageAccounts && (
+                        <button
+                          onClick={() => setLocked(account, !locked)}
+                          className={`rounded-lg border p-1.5 ${locked
+                            ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                            : "border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"}`}
+                          title={locked ? "Locked — click to unlock and allow posting again" : "Lock this page (stops posting; stays connected, analytics keep running)"}
+                        >
+                          {locked ? <Lock size={14} /> : <LockOpen size={14} />}
+                        </button>
                       )}
                       {canManageAccounts && (
                         <button

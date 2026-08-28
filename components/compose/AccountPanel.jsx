@@ -1,15 +1,30 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Search, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, Lock, Plus, Search, X } from "lucide-react";
 import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
 import AccountAvatar from "@/components/common/AccountAvatar";
+
+// A page an admin has locked (social_accounts.posting_locked). Still connected
+// and still reporting analytics — it just can't be a post target, so the
+// composer refuses to select it.
+const isLocked = (a) => a?.posting_locked === true;
 
 // LEFT panel of the SocialPilot-style composer: searchable account list
 // grouped by platform, with per-group select-all and collapsible sections.
 export default function AccountPanel({ accounts, selectedIds, onChange, onNavigate, collapsed, onToggleCollapsed }) {
   const [search, setSearch] = useState("");
   const [closedGroups, setClosedGroups] = useState({}); // platform -> true when collapsed
+
+  // A prefilled selection (Duplicate, template, calendar) can name a page that
+  // has been locked since. Drop those once `accounts` has actually loaded — the
+  // row stays visible below, badged "Locked", so the absence is explained
+  // rather than mysterious.
+  useEffect(() => {
+    if (!accounts.length || !selectedIds.length) return;
+    const kept = selectedIds.filter((id) => !isLocked(accounts.find((a) => a.id === id)));
+    if (kept.length !== selectedIds.length) onChange(kept);
+  }, [accounts, selectedIds, onChange]);
 
   const groups = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -23,8 +38,13 @@ export default function AccountPanel({ accounts, selectedIds, onChange, onNaviga
   const toggle = (id) =>
     onChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
 
+  // Select-all of every flavour skips locked pages, so "Select all" can never
+  // build a selection the backend will reject.
+  const selectableIds = (list) => list.filter((a) => !isLocked(a)).map((a) => a.id);
+
   const toggleGroup = (group) => {
-    const ids = group.accounts.map((a) => a.id);
+    const ids = selectableIds(group.accounts);
+    if (!ids.length) return;
     const allSelected = ids.every((id) => selectedIds.includes(id));
     onChange(allSelected ? selectedIds.filter((id) => !ids.includes(id)) : [...new Set([...selectedIds, ...ids])]);
   };
@@ -37,7 +57,7 @@ export default function AccountPanel({ accounts, selectedIds, onChange, onNaviga
           <ChevronRight size={16} />
         </button>
         {groups.map((g) => (
-          <div key={g.platform} title={`${PLATFORM_META[g.platform]?.label}: ${g.accounts.filter((a) => selectedIds.includes(a.id)).length}/${g.accounts.length} selected`}
+          <div key={g.platform} title={`${PLATFORM_META[g.platform]?.label}: ${g.accounts.filter((a) => selectedIds.includes(a.id)).length}/${g.accounts.filter((a) => !isLocked(a)).length} selected`}
             className="flex flex-col items-center gap-0.5">
             <PlatformIcon platform={g.platform} size={16} />
             <span className="text-[10px] font-semibold text-slate-500 dark:text-gray-400">
@@ -80,7 +100,7 @@ export default function AccountPanel({ accounts, selectedIds, onChange, onNaviga
           )}
         </div>
         <div className="mt-1.5 flex items-center justify-between px-0.5 text-xs">
-          <button onClick={() => onChange(accounts.map((a) => a.id))} className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Select all</button>
+          <button onClick={() => onChange(selectableIds(accounts))} className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Select all</button>
           <button onClick={() => onChange([])} className="font-medium text-slate-500 dark:text-gray-400 hover:underline">Clear</button>
         </div>
       </div>
@@ -94,6 +114,7 @@ export default function AccountPanel({ accounts, selectedIds, onChange, onNaviga
         {groups.map((group) => {
           const meta = PLATFORM_META[group.platform];
           const selCount = group.accounts.filter((a) => selectedIds.includes(a.id)).length;
+          const openCount = group.accounts.filter((a) => !isLocked(a)).length;
           const closed = !!closedGroups[group.platform];
           return (
             <div key={group.platform} className="mb-1.5">
@@ -106,23 +127,31 @@ export default function AccountPanel({ accounts, selectedIds, onChange, onNaviga
                 </button>
                 <input
                   type="checkbox"
-                  checked={selCount === group.accounts.length}
-                  ref={(el) => { if (el) el.indeterminate = selCount > 0 && selCount < group.accounts.length; }}
+                  checked={openCount > 0 && selCount === openCount}
+                  ref={(el) => { if (el) el.indeterminate = selCount > 0 && selCount < openCount; }}
                   onChange={() => toggleGroup(group)}
-                  className="h-3.5 w-3.5 rounded border-slate-300 dark:border-gray-700 accent-indigo-600"
-                  title={`Select all ${meta?.label} accounts`}
+                  disabled={openCount === 0}
+                  className="h-3.5 w-3.5 rounded border-slate-300 dark:border-gray-700 accent-indigo-600 disabled:opacity-40"
+                  title={openCount ? `Select all ${meta?.label} accounts` : `Every ${meta?.label} account is locked`}
                 />
                 <PlatformIcon platform={group.platform} size={14} />
                 <span className="flex-1 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-gray-400">{meta?.label}</span>
-                <span className="text-[10px] font-semibold text-slate-400 dark:text-gray-500">{selCount}/{group.accounts.length}</span>
+                <span className="text-[10px] font-semibold text-slate-400 dark:text-gray-500">{selCount}/{openCount}</span>
               </div>
-              {!closed && group.accounts.map((account) => (
-                <label key={account.id} className="ml-4 flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-slate-50 dark:hover:bg-gray-800/50">
+              {!closed && group.accounts.map((account) => {
+                const locked = isLocked(account);
+                return (
+                <label
+                  key={account.id}
+                  title={locked ? `${account.display_name} is locked — posting is turned off. Analytics keep updating; an admin can unlock it in Accounts.` : undefined}
+                  className={`ml-4 flex items-center gap-2.5 rounded-lg px-2 py-2 ${locked ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-slate-50 dark:hover:bg-gray-800/50"}`}
+                >
                   <input
                     type="checkbox"
-                    checked={selectedIds.includes(account.id)}
+                    checked={!locked && selectedIds.includes(account.id)}
                     onChange={() => toggle(account.id)}
-                    className="h-4 w-4 rounded border-slate-300 dark:border-gray-700 accent-indigo-600"
+                    disabled={locked}
+                    className="h-4 w-4 rounded border-slate-300 dark:border-gray-700 accent-indigo-600 disabled:cursor-not-allowed"
                   />
                   <div className="relative shrink-0">
                     <AccountAvatar account={account} size={28} />
@@ -131,8 +160,14 @@ export default function AccountPanel({ accounts, selectedIds, onChange, onNaviga
                     </span>
                   </div>
                   <span className="min-w-0 flex-1 truncate text-sm text-slate-800 dark:text-gray-100">{account.display_name}</span>
+                  {locked && (
+                    <span className="flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-gray-800 dark:text-gray-400">
+                      <Lock size={9} /> Locked
+                    </span>
+                  )}
                 </label>
-              ))}
+                );
+              })}
             </div>
           );
         })}
