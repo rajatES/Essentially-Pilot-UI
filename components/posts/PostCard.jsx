@@ -53,7 +53,11 @@ export default function PostCard({ post, author, onDelete, onOpen, onDuplicate, 
               </span>
             )}
             {targets.map((t) => (
-              <span key={t.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-gray-800 px-2 py-0.5 text-xs text-slate-600 dark:text-gray-300">
+              <span key={t.id} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+                t.status === "failed"
+                  ? "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400"
+                  : "bg-slate-100 dark:bg-gray-800 text-slate-600 dark:text-gray-300"
+              }`}>
                 <PlatformIcon platform={t.social_accounts?.platform || t.platform} size={10} />
                 {t.social_accounts?.display_name || "Page"}
               </span>
@@ -77,8 +81,13 @@ export default function PostCard({ post, author, onDelete, onOpen, onDuplicate, 
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={post.image_url} alt="" className="mt-3 h-24 rounded-lg object-cover border border-slate-200 dark:border-gray-800" />
           )}
-          {post.status === "failed" && targets.filter(t => t.last_error).map((t, i) => (
-            <p key={i} className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-start gap-1">
+          {/* Per-page failures. Gated on the TARGET, not on post.status: a post
+              that published to some pages and failed on others rolls up to
+              "sent", and gating this on post.status === "failed" meant the only
+              record of those failures was invisible in the UI. Threads fans out
+              across ~27 Postiz channels, so that partial case is the norm. */}
+          {targets.filter((t) => t.status === "failed" && t.last_error).map((t) => (
+            <p key={t.id} className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-start gap-1">
               <XCircle size={12} className="mt-0.5 shrink-0" />
               <span><strong>{t.social_accounts?.display_name}:</strong> {t.last_error}</span>
             </p>

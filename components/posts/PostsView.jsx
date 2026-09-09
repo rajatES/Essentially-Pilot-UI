@@ -5,18 +5,32 @@ import { FileText, LayoutList, Search, Users, X } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import { PLATFORM_META } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
-import { usePostsData, usePostsInvalidate, useOptimisticPosts } from "@/lib/queries";
+import { usePostsData, usePostsInvalidate, useOptimisticPosts, usePostFailures } from "@/lib/queries";
 import PostCard from "./PostCard";
+import FailureList from "./FailureList";
 import CsvImportModal from "./CsvImportModal";
 import { PostListSkeleton } from "@/components/common/Skeleton";
 
 // SocialPilot-style Manage Posts: status tabs + combined filters.
+//
+// `match` rather than a status list so a tab can be more than a post status.
+// **Error is the exception: it does not read this list at all** — it renders
+// FailureList from /api/posts/failures instead. Two reasons no post-shaped
+// filter could do the job:
+//
+//  - `usePostsData` is capped at the 100 most recent posts, a few days at ES's
+//    volume, so an older failure could never appear here however it filtered.
+//  - Post-level `status` cannot express a partial failure. Every backend
+//    roll-up resolves a post to "sent" as soon as ONE target succeeds, and to
+//    "failed" only when they ALL do. A post fanned out to 56 Threads channels
+//    that failed on one of them is not a failed post — the failure lives on the
+//    target, and that is the grain the Error tab now shows.
 const TABS = [
-  { id: "queued",    label: "Queued",           statuses: ["scheduled", "publishing", "approved"] },
-  { id: "drafts",    label: "Drafts",           statuses: ["draft"] },
-  { id: "pending",   label: "Pending Approval", statuses: ["pending_review", "rejected"] },
-  { id: "error",     label: "Error",            statuses: ["failed"] },
-  { id: "delivered", label: "Delivered",        statuses: ["sent", "deleted"] },
+  { id: "queued",    label: "Queued",           match: (p) => ["scheduled", "publishing", "approved"].includes(p.status) },
+  { id: "drafts",    label: "Drafts",           match: (p) => p.status === "draft" },
+  { id: "pending",   label: "Pending Approval", match: (p) => ["pending_review", "rejected"].includes(p.status) },
+  { id: "error",     label: "Error",            failureFeed: true, match: () => false },
+  { id: "delivered", label: "Delivered",        match: (p) => ["sent", "deleted"].includes(p.status) },
 ];
 
 const TYPE_OPTIONS = [
@@ -128,14 +142,42 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
     });
   }, [posts, authorFilter, accountFilter, platformFilter, typeFilter, sourceFilter, search, dateFrom, dateTo]);
 
+  // Failure feed. Fetched even when the Error tab is closed, on purpose: its
+  // badge is how anyone finds out a delivery failed at all, and a badge that
+  // only counts once you click it is no warning.
+  const { data: failureData, isLoading: failuresLoading } = usePostFailures();
+  const allFailures = useMemo(() => failureData?.failures || [], [failureData]);
+
+  // The same filter bar, applied to failure rows. Type is skipped — it is
+  // derived from a post's media, which a failure row doesn't carry — and so is
+  // the author filter's "none" case, for the same reason.
+  const failures = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return allFailures.filter((f) => {
+      if (authorFilter === "none" ? f.createdBy : authorFilter !== "all" && f.createdBy !== authorFilter) return false;
+      if (accountFilter !== "all" && f.accountId !== accountFilter) return false;
+      if (platformFilter !== "all" && f.platform !== platformFilter) return false;
+      if (sourceFilter !== "all" && (f.source || "app") !== sourceFilter) return false;
+      if (q && !(f.body || "").toLowerCase().includes(q) && !(f.channel || "").toLowerCase().includes(q)) return false;
+      const when = f.when ? new Date(f.when) : null;
+      if (dateFrom && (!when || when < new Date(`${dateFrom}T00:00:00`))) return false;
+      if (dateTo && (!when || when > new Date(`${dateTo}T23:59:59`))) return false;
+      return true;
+    });
+  }, [allFailures, authorFilter, accountFilter, platformFilter, sourceFilter, search, dateFrom, dateTo]);
+
+  // Lets a failure row open its post when the post is still inside
+  // usePostsData's 100-post window. Older ones show without a link.
+  const postsById = useMemo(() => Object.fromEntries(posts.map((p) => [p.id, p])), [posts]);
+
   const tabCounts = useMemo(() => {
     const counts = {};
-    for (const t of TABS) counts[t.id] = filtered.filter((p) => t.statuses.includes(p.status)).length;
+    for (const t of TABS) counts[t.id] = t.failureFeed ? failures.length : filtered.filter(t.match).length;
     return counts;
-  }, [filtered]);
+  }, [filtered, failures]);
 
   const activeTab = TABS.find((t) => t.id === tab);
-  const visiblePosts = filtered.filter((p) => activeTab.statuses.includes(p.status));
+  const visiblePosts = filtered.filter(activeTab.match);
 
   const platformsInUse = useMemo(() => {
     const set = new Set(accounts.map((a) => a.platform));
@@ -188,10 +230,15 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
           <option value="all">All platforms</option>
           {platformsInUse.map((p) => <option key={p} value={p}>{PLATFORM_META[p]?.label || p}</option>)}
         </select>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} title="Content type"
-          className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-slate-600 dark:text-gray-300 outline-none">
-          {TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
+        {/* Hidden on the Error tab: content type is derived from a post's
+            media, and a failure row is per-channel and carries none. A control
+            that silently does nothing is worse than one that isn't there. */}
+        {!activeTab.failureFeed && (
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} title="Content type"
+            className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-slate-600 dark:text-gray-300 outline-none">
+            {TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        )}
         <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} title="How the post was created"
           className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-sm text-slate-600 dark:text-gray-300 outline-none">
           <option value="all">Any source</option>
@@ -241,8 +288,21 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
         </div>
       )}
 
-      {/* List */}
-      {isLoading ? (
+      {/* List. The Error tab renders the failure feed instead of post cards —
+          see TABS. */}
+      {activeTab.failureFeed ? (
+        failuresLoading ? (
+          <PostListSkeleton />
+        ) : (
+          <FailureList
+            failures={failures}
+            days={failureData?.days ?? 90}
+            truncated={!!failureData?.truncated}
+            onOpenPost={onOpenPost}
+            postsById={postsById}
+          />
+        )
+      ) : isLoading ? (
         <PostListSkeleton />
       ) : posts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 py-16 text-center">

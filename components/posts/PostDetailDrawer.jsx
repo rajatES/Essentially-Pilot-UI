@@ -264,7 +264,13 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
                       <PlatformIcon platform={t.social_accounts?.platform || t.platform} size={15} />
                       <div className="flex-1 min-w-0">
                         <p className="truncate text-sm font-medium text-slate-800 dark:text-white">{t.social_accounts?.display_name || "Page"}</p>
-                        <p className="text-xs capitalize text-slate-500 dark:text-gray-400">{t.status}</p>
+                        <p className={`text-xs capitalize ${t.status === "failed" ? "text-red-600 dark:text-red-400 font-semibold" : "text-slate-500 dark:text-gray-400"}`}>{t.status}</p>
+                        {/* Why this page failed. Lives on the target, not the
+                            post: a post that published to some pages and failed
+                            on others has no post-level error to show. */}
+                        {t.status === "failed" && t.last_error && (
+                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t.last_error}</p>
+                        )}
                       </div>
                       {t.status === "sent" && url && (
                         <a href={url} target="_blank" rel="noopener noreferrer"
