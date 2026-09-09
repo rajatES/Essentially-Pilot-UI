@@ -145,7 +145,7 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
   // Failure feed. Fetched even when the Error tab is closed, on purpose: its
   // badge is how anyone finds out a delivery failed at all, and a badge that
   // only counts once you click it is no warning.
-  const { data: failureData, isLoading: failuresLoading } = usePostFailures();
+  const { data: failureData, isLoading: failuresLoading, error: failuresError } = usePostFailures();
   const allFailures = useMemo(() => failureData?.failures || [], [failureData]);
 
   // The same filter bar, applied to failure rows. Type is skipped — it is
@@ -172,9 +172,17 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
 
   const tabCounts = useMemo(() => {
     const counts = {};
-    for (const t of TABS) counts[t.id] = t.failureFeed ? failures.length : filtered.filter(t.match).length;
+    // "?" rather than 0 when the feed is unreachable: a confident zero on the
+    // Error badge is a claim we cannot make, and is how a failure goes unnoticed.
+    for (const t of TABS) {
+      counts[t.id] = t.failureFeed
+        ? failuresError
+          ? "?"
+          : failures.length
+        : filtered.filter(t.match).length;
+    }
     return counts;
-  }, [filtered, failures]);
+  }, [filtered, failures, failuresError]);
 
   const activeTab = TABS.find((t) => t.id === tab);
   const visiblePosts = filtered.filter(activeTab.match);
@@ -298,6 +306,7 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
             failures={failures}
             days={failureData?.days ?? 90}
             truncated={!!failureData?.truncated}
+            error={failuresError}
             onOpenPost={onOpenPost}
             postsById={postsById}
           />

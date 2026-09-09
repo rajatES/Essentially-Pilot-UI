@@ -53,7 +53,7 @@ const CLASSES = [
 const OTHER = CLASSES[CLASSES.length - 1];
 const classify = (error) => CLASSES.find((c) => c.test.test(error || "")) || OTHER;
 
-export default function FailureList({ failures, days, truncated, onOpenPost, postsById }) {
+export default function FailureList({ failures, days, truncated, error, onOpenPost, postsById }) {
   const [activeClass, setActiveClass] = useState("all");
 
   const counts = useMemo(() => {
@@ -71,6 +71,26 @@ export default function FailureList({ failures, days, truncated, onOpenPost, pos
   );
 
   const activeHint = activeClass === "all" ? null : CLASSES.find((c) => c.id === activeClass)?.hint;
+
+  // A feed we could not load is NOT an empty feed. Without this branch a failed
+  // request renders the empty state — "No failed deliveries" — which is the
+  // most dangerous thing this component could say, and exactly the class of
+  // silent false negative it was built to remove. It is also the live case
+  // whenever the frontend deploys ahead of the backend that serves this route.
+  if (error) {
+    return (
+      <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-4 text-center">
+        <AlertTriangle size={28} className="mx-auto mb-2 text-amber-500" />
+        <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+          Couldn&apos;t load the failure list.
+        </p>
+        <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+          This is not the same as having no failures — there may be failed posts this page cannot show
+          right now. {error.message}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
