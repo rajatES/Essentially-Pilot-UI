@@ -7,6 +7,7 @@ import { apiJson } from "@/lib/apiClient";
 import { useInsights } from "@/lib/queries";
 import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
+import ViewPostLink, { pickViewableTarget } from "@/components/common/ViewPostLink";
 
 const RANGES = [
   [7, "7d"],
@@ -234,8 +235,24 @@ export default function PerformanceView() {
                     {p.pages.slice(0, 2).join(", ")}{p.pages.length > 2 ? ` +${p.pages.length - 2}` : ""} · {p.category}
                   </span>
                 </div>
-                <p className="mt-0.5 line-clamp-1 text-sm text-slate-700 dark:text-gray-200">{p.body || "(no caption)"}</p>
-                <p className="text-[11px] text-slate-400 dark:text-gray-500">{p.sent_at ? new Date(p.sent_at).toLocaleString() : ""}</p>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <p className="line-clamp-1 text-sm text-slate-700 dark:text-gray-200">{p.body || "(no caption)"}</p>
+                  {/* Open the live post. These rows aggregate every page the
+                      post went to, so there is no single platform post to point
+                      at — pickViewableTarget answers "see this live somewhere",
+                      preferring a page whose permalink we actually hold. */}
+                  {viewTarget(p) && (
+                    <ViewPostLink
+                      platform={viewTarget(p).platform}
+                      externalPostId={viewTarget(p).externalPostId}
+                      permalink={viewTarget(p).permalink}
+                      status="sent"
+                      size={12}
+                      className="shrink-0"
+                    />
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 dark:text-gray-500" suppressHydrationWarning>{p.sent_at ? new Date(p.sent_at).toLocaleString() : ""}</p>
               </div>
               <div className="flex shrink-0 items-center gap-3 text-xs">
                 {p.hasInsights ? (
@@ -258,6 +275,14 @@ export default function PerformanceView() {
       )}
     </div>
   );
+}
+
+// Cached per post object: the JSX reads the picked target three times and
+// rescanning every target on each read would be wasteful in a 500-row list.
+const viewTargetCache = new WeakMap();
+function viewTarget(post) {
+  if (!viewTargetCache.has(post)) viewTargetCache.set(post, pickViewableTarget(post.targets));
+  return viewTargetCache.get(post);
 }
 
 function Metric({ icon: Icon, value }) {

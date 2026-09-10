@@ -39,6 +39,33 @@ export function viewPostUnavailableReason({ platform, externalPostId, status }) 
   return "No public link for this post.";
 }
 
+// Pick the one target of a fanned-out post that should back its single "open"
+// link. A post can go to dozens of pages, so there is no single "the" post on
+// the platform — this answers "see this live somewhere".
+//
+// The test is whether a URL can actually be BUILT, not whether a permalink was
+// stored. Those differ: a Facebook or X target resolves from its id with no
+// permalink at all, while a Threads target without one never resolves. An
+// earlier version preferred "has a permalink", which picked the unlinkable
+// Threads page of a Threads+Facebook post and left it looking unopenable.
+//
+// Falls back to the first real target when none resolve, so the row still shows
+// a greyed icon carrying the reason rather than nothing at all.
+//
+// dashboard.service.ts applies the same rule server-side, where the aggregation
+// happens before the frontend ever sees the targets.
+export function pickViewableTarget(targets) {
+  let fallback = null;
+  for (const t of targets || []) {
+    const id = t.externalPostId ?? t.external_post_id;
+    if (!id || String(id).includes("_mock_")) continue;
+    const candidate = { platform: t.platform, externalPostId: id, permalink: t.permalink || null };
+    if (externalPostUrl(candidate.platform, candidate.externalPostId, candidate.permalink)) return candidate;
+    if (!fallback) fallback = candidate;
+  }
+  return fallback;
+}
+
 export default function ViewPostLink({
   platform,
   externalPostId,
