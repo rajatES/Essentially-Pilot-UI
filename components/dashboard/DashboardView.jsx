@@ -11,6 +11,7 @@ import {
   Activity, TrendingUp, Clock, AlertTriangle, Link as LinkIcon, CheckCircle2, RefreshCw
 } from "lucide-react";
 import { apiFetch } from "@/lib/apiClient";
+import ViewPostLink from "@/components/common/ViewPostLink";
 
 const PIE_COLORS = ["#2864d8", "#e1306c", "#16a34a", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9", "#64748b"];
 
@@ -257,7 +258,24 @@ export default function DashboardView({ onNavigate }) {
                   <div className="h-10 w-10 shrink-0 rounded bg-slate-100 dark:bg-gray-800" />
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-slate-700 dark:text-gray-200">{p.body || "(no caption)"}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-sm text-slate-700 dark:text-gray-200">{p.body || "(no caption)"}</p>
+                    {/* Opens the live post. `p.link` is the first viewable page
+                        of the fan-out (dashboard.service picks it, preferring
+                        one that has a real permalink); omitted entirely when the
+                        post has no live page, since a top-post row is a
+                        highlight, not a diagnostic. */}
+                    {p.link && (
+                      <ViewPostLink
+                        platform={p.link.platform}
+                        externalPostId={p.link.externalPostId}
+                        permalink={p.link.permalink}
+                        status="sent"
+                        size={12}
+                        className="shrink-0"
+                      />
+                    )}
+                  </div>
                   <p className="text-xs text-slate-400 dark:text-gray-500">
                     👍 {p.likes.toLocaleString()} · 💬 {p.comments.toLocaleString()} · ↗ {p.shares.toLocaleString()}
                     {p.reach ? ` · ${p.reach.toLocaleString()} reach` : ""}

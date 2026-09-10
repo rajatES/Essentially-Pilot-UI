@@ -6,13 +6,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3, Table2, LayoutGrid, Download, RefreshCw, DownloadCloud, Columns3, Search, X,
   ChevronDown, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, Info, MoreHorizontal,
-  ExternalLink, Image as ImageIcon, Video, Link2, FileText,
+  Image as ImageIcon, Video, Link2, FileText,
   TrendingUp, Heart, MessageCircle, Share2, Eye,
 } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import { usePostAnalytics, usePostsData } from "@/lib/queries";
 import { PLATFORM_META, PlatformIcon, sourceBadge } from "@/lib/platformMeta";
 import { externalPostUrl } from "@/lib/fbLink";
+import ViewPostLink from "@/components/common/ViewPostLink";
 import { useToast } from "@/components/common/ToastProvider";
 import {
   COLUMN_BY_KEY, DEFAULT_VISIBLE, cellValue, formatCell, sortValue, compactNum, contentLabel,
@@ -670,17 +671,22 @@ function RowActions({ row, url }) {
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      {url ? (
-        <a href={url} target="_blank" rel="noopener noreferrer"
-          className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
-          View
-        </a>
-      ) : (
-        <span title="No public link for this platform"
-          className="cursor-not-allowed rounded-lg border border-slate-100 px-3 py-1 text-xs font-semibold text-slate-300 dark:border-gray-800 dark:text-gray-600">
-          View
-        </span>
-      )}
+      {/* "No public link for this platform" used to be the only explanation,
+          and it was wrong for the commonest case: a Threads/Instagram post
+          whose permalink simply hasn't been confirmed yet. ViewPostLink tells
+          those apart, and gives the same answer here as in Posts. */}
+      <ViewPostLink
+        platform={row.platform}
+        externalPostId={row.externalPostId}
+        permalink={row.permalink}
+        size={12}
+        label={<span className="text-xs font-semibold">View</span>}
+        className={`rounded-lg border px-3 py-1 ${
+          url
+            ? "border-slate-200 hover:bg-slate-50 dark:border-gray-700 dark:hover:bg-gray-800"
+            : "border-slate-100 dark:border-gray-800"
+        }`}
+      />
       <button ref={btnRef} onClick={openMenu} title="More"
         className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
         <MoreHorizontal size={15} />
@@ -706,7 +712,6 @@ function PostGrid({ rows }) {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {rows.map((r) => {
         const m = r.metrics || {};
-        const url = r.externalPostId ? externalPostUrl(r.platform, r.externalPostId, r.permalink) : null;
         const isVideo = r.postType === "video" || r.platformOptions?.[r.platform]?.format === "reel";
         return (
           <div key={r.rowId}
@@ -740,7 +745,7 @@ function PostGrid({ rows }) {
                 <span title="Likes">♥ {compactNum(m.likes) ?? "—"}</span>
                 <span title="Comments">💬 {compactNum(m.comments) ?? "—"}</span>
                 <span title="Shares">↗ {compactNum(m.shares) ?? "—"}</span>
-                {url && <a href={url} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-indigo-500"><ExternalLink size={13} /></a>}
+                <ViewPostLink platform={r.platform} externalPostId={r.externalPostId} permalink={r.permalink} size={13} />
               </span>
             </div>
           </div>

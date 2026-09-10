@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock, ExternalLink, FileText, History, Pencil, RefreshCw, ShieldCheck, Trash2, Webhook, X, XCircle } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
-import { externalPostUrl } from "@/lib/fbLink";
+import ViewPostLink from "@/components/common/ViewPostLink";
 import { STATUS_STYLES, statusLabel, fmt, PlatformIcon } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
 import { usePostsInvalidate } from "@/lib/queries";
@@ -256,12 +256,10 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">Target pages</p>
               <div className="space-y-2">
                 {(post.post_targets || []).map((t) => {
-                  // t.permalink is set for postiz-backed targets (Threads /
-                  // personal Instagram), which have no id-derivable URL.
-                  const url = externalPostUrl(t.social_accounts?.platform || t.platform, t.external_post_id, t.permalink);
+                  const platform = t.social_accounts?.platform || t.platform;
                   return (
                     <div key={t.id} className="flex items-center gap-2 rounded-lg border border-slate-100 dark:border-gray-800 p-2.5">
-                      <PlatformIcon platform={t.social_accounts?.platform || t.platform} size={15} />
+                      <PlatformIcon platform={platform} size={15} />
                       <div className="flex-1 min-w-0">
                         <p className="truncate text-sm font-medium text-slate-800 dark:text-white">{t.social_accounts?.display_name || "Page"}</p>
                         <p className={`text-xs capitalize ${t.status === "failed" ? "text-red-600 dark:text-red-400 font-semibold" : "text-slate-500 dark:text-gray-400"}`}>{t.status}</p>
@@ -272,11 +270,20 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
                           <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t.last_error}</p>
                         )}
                       </div>
-                      {t.status === "sent" && url && (
-                        <a href={url} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 px-2.5 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20">
-                          <ExternalLink size={12} /> View
-                        </a>
+                      {/* Shown for every sent page, link or not. The disabled
+                          state carries the reason (see ViewPostLink) — hiding it
+                          made a Threads post whose permalink hasn't landed yet
+                          look identical to one that was never published. */}
+                      {t.status === "sent" && (
+                        <ViewPostLink
+                          platform={platform}
+                          externalPostId={t.external_post_id}
+                          permalink={t.permalink}
+                          status={t.status}
+                          size={12}
+                          label={<span className="text-xs font-medium">View</span>}
+                          className="rounded-lg px-2.5 py-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
+                        />
                       )}
                     </div>
                   );

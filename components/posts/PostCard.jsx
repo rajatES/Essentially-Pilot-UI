@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock, Copy, ExternalLink, Trash2, XCircle } from "lucide-react";
+import ViewPostLink from "@/components/common/ViewPostLink";
 import { STATUS_STYLES, statusLabel, fmt, PlatformIcon, sourceBadge } from "@/lib/platformMeta";
 
 // One post row in the Posts list. Extracted from app/app/page.js; target
@@ -52,16 +53,36 @@ export default function PostCard({ post, author, onDelete, onOpen, onDuplicate, 
                 IG reel
               </span>
             )}
-            {targets.map((t) => (
-              <span key={t.id} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
-                t.status === "failed"
-                  ? "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400"
-                  : "bg-slate-100 dark:bg-gray-800 text-slate-600 dark:text-gray-300"
-              }`}>
-                <PlatformIcon platform={t.social_accounts?.platform || t.platform} size={10} />
-                {t.social_accounts?.display_name || "Page"}
-              </span>
-            ))}
+            {/* One chip per page. A chip for a LIVE page carries an open-in-new-
+                tab icon straight to the published post — the Posts list is where
+                people actually look for a post, and until now the only way to
+                reach the real thing was to open the drawer first. */}
+            {targets.map((t) => {
+              const platform = t.social_accounts?.platform || t.platform;
+              return (
+                <span key={t.id} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+                  t.status === "failed"
+                    ? "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400"
+                    : "bg-slate-100 dark:bg-gray-800 text-slate-600 dark:text-gray-300"
+                }`}>
+                  <PlatformIcon platform={platform} size={10} />
+                  {t.social_accounts?.display_name || "Page"}
+                  {/* Only where there is something to open: a queued or failed
+                      page has no live post, and a greyed icon on every chip of a
+                      56-page fan-out would be noise rather than information. */}
+                  {t.status === "sent" && (
+                    <ViewPostLink
+                      platform={platform}
+                      externalPostId={t.external_post_id}
+                      permalink={t.permalink}
+                      status={t.status}
+                      size={10}
+                      className="-mr-0.5 ml-0.5"
+                    />
+                  )}
+                </span>
+              );
+            })}
           </div>
           <p className="text-sm text-slate-700 dark:text-gray-200 leading-relaxed whitespace-pre-wrap line-clamp-3">
             {post.body}
