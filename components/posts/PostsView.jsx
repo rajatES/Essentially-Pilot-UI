@@ -122,6 +122,58 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
     }
   }
 
+  // Re-send failed deliveries. Rows arrive from the Error tab one at a time or
+  // in bulk; either way they are grouped by post, because /api/posts/retry
+  // retries the failed TARGETS of one post and a single filtered view routinely
+  // spans many posts (one bad hour = dozens of posts, one cause).
+  async function retryFailures(rows) {
+    const eligible = (rows || []).filter((f) => f.postId && f.targetId && !f.externalPostId);
+    if (!eligible.length) {
+      showToast("Nothing here can be re-sent — those pages already received the post.", "warn");
+      return;
+    }
+
+    const byPost = new Map();
+    for (const f of eligible) {
+      if (!byPost.has(f.postId)) byPost.set(f.postId, []);
+      byPost.get(f.postId).push(f.targetId);
+    }
+
+    let published = 0;
+    let failedAgain = 0;
+    let skipped = 0;
+    const errors = [];
+
+    // Sequential on purpose: each call publishes to real pages, and firing a
+    // dozen at once is how a Postiz rate limit (~100 creates/hour for the whole
+    // workspace) turns one recoverable outage into a second one.
+    for (const [postId, targetIds] of byPost) {
+      try {
+        const r = await apiJson("/api/posts/retry", {
+          method: "POST",
+          body: JSON.stringify({ postId, targetIds }),
+        });
+        published += r.published || 0;
+        failedAgain += r.failed || 0;
+        skipped += (r.skipped || []).length;
+      } catch (err) {
+        errors.push(err.message);
+      }
+    }
+
+    invalidatePosts();
+
+    if (errors.length && !published && !failedAgain) {
+      showToast(errors[0], "error");
+      return;
+    }
+    const parts = [`${published} sent`];
+    if (failedAgain) parts.push(`${failedAgain} failed again`);
+    if (skipped) parts.push(`${skipped} skipped`);
+    if (errors.length) parts.push(`${errors.length} request(s) errored`);
+    showToast(parts.join(", ") + ".", failedAgain || skipped || errors.length ? "warn" : "ok");
+  }
+
   const authorMap = Object.fromEntries(authors.map((a) => [a.id, a]));
 
   // Tab counts respect the filters (but not the tab itself).
@@ -309,6 +361,7 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
             error={failuresError}
             onOpenPost={onOpenPost}
             postsById={postsById}
+            onRetry={retryFailures}
           />
         )
       ) : isLoading ? (

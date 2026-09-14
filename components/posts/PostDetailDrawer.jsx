@@ -44,6 +44,47 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
   const [busy, setBusy] = useState(false); // guards approve/reject/submit/save from double-fire
   const [editDraft, setEditDraft] = useState({ body: "", linkUrl: "", scheduledFor: "" });
   const [reviewComment, setReviewComment] = useState("");
+  const [retryBusy, setRetryBusy] = useState(null); // targetId | "all"
+  const [retryAt, setRetryAt] = useState(""); // empty = send now
+
+  // A failed target that already carries an external_post_id reached the
+  // platform, so re-sending it would publish a duplicate. Mirrors the guard in
+  // posts.service.retry(), which is what actually refuses it.
+  const failedTargets = (post.post_targets || []).filter((t) => t.status === "failed" && !t.external_post_id);
+
+  // Re-send failed pages. Without a time this publishes immediately; with one
+  // the targets go back on the queue for the cron run to pick up.
+  async function retryTargets(targetIds, key) {
+    setRetryBusy(key);
+    try {
+      const r = await apiJson("/api/posts/retry", {
+        method: "POST",
+        body: JSON.stringify({
+          postId: post.id,
+          targetIds,
+          scheduledFor: retryAt ? new Date(retryAt).toISOString() : null,
+        }),
+      });
+      if (r.queued) {
+        showToast(`Requeued ${r.retried} page(s) for ${fmt(retryAt)}.`);
+      } else {
+        const parts = [`${r.published} sent`];
+        if (r.failed) parts.push(`${r.failed} failed again`);
+        if ((r.skipped || []).length) parts.push(`${r.skipped.length} skipped`);
+        showToast(parts.join(", ") + ".", r.failed || (r.skipped || []).length ? "warn" : "ok");
+      }
+      // The drawer holds its own copy of the post, so pull the fresh row —
+      // otherwise the target list keeps showing "failed" after a successful send.
+      const fresh = await apiJson(`/api/posts`);
+      const updated = (fresh?.posts || []).find((p) => p.id === post.id);
+      if (updated) setPost(updated);
+      invalidatePosts();
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setRetryBusy(null);
+    }
+  }
 
   // Approval audit trail for this post (who submitted/approved/rejected + notes).
   const { data: historyData } = useQuery({
@@ -285,6 +326,26 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
                           className="rounded-lg px-2.5 py-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-500/10"
                         />
                       )}
+
+                      {/* Re-send just this page. Offered only where it is safe:
+                          a failed target with no post id never reached the
+                          platform, so there is no duplicate to create. */}
+                      {t.status === "failed" && !t.external_post_id && (
+                        <button
+                          onClick={() => retryTargets([t.id], t.id)}
+                          disabled={retryBusy !== null}
+                          className="flex shrink-0 items-center gap-1 rounded-lg border border-indigo-200 dark:border-indigo-500/30 px-2.5 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 disabled:opacity-50"
+                        >
+                          <RefreshCw size={12} className={retryBusy === t.id ? "animate-spin" : ""} />
+                          {retryBusy === t.id ? "Sending…" : "Re-send"}
+                        </button>
+                      )}
+
+                      {t.status === "failed" && t.external_post_id && (
+                        <span className="shrink-0 text-xs text-slate-500 dark:text-gray-400" title="This page returned a post id, so the post is live there. Re-sending would duplicate it.">
+                          on platform
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -293,6 +354,54 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
 
             {post.last_error && (
               <p className="rounded-lg bg-red-50 dark:bg-red-500/10 p-2.5 text-xs text-red-600 dark:text-red-400">{post.last_error}</p>
+            )}
+
+            {/* Post-level re-send: every failed page at once, now or at a time.
+                Works the same for Facebook, Instagram, YouTube and the
+                Postiz-backed channels (Threads, standalone Instagram, X) —
+                /api/posts/retry hands them all to the queue publisher rather
+                than knowing anything per-platform. */}
+            {failedTargets.length > 0 && (
+              <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/10 p-3">
+                <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+                  {failedTargets.length} {failedTargets.length === 1 ? "page" : "pages"} can be re-sent
+                </p>
+                <p className="mt-1 text-xs text-indigo-800 dark:text-indigo-300">
+                  Pages that already published are left alone — only the failed ones go out again.
+                </p>
+
+                <label className="mt-2.5 block text-xs font-medium text-indigo-900 dark:text-indigo-200">
+                  When
+                  <input
+                    type="datetime-local"
+                    value={retryAt}
+                    onChange={(e) => setRetryAt(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-sm text-slate-800 dark:text-white"
+                  />
+                </label>
+                <p className="mt-1 text-[11px] text-indigo-700 dark:text-indigo-300">
+                  {retryAt ? "Queued for this time." : "Leave empty to send immediately."}
+                </p>
+
+                <div className="mt-2.5 flex gap-2">
+                  <button
+                    onClick={() => retryTargets(failedTargets.map((t) => t.id), "all")}
+                    disabled={retryBusy !== null}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    <RefreshCw size={14} className={retryBusy === "all" ? "animate-spin" : ""} />
+                    {retryBusy === "all" ? "Working…" : retryAt ? "Reschedule failed pages" : "Re-send failed pages"}
+                  </button>
+                  {retryAt && (
+                    <button
+                      onClick={() => setRetryAt("")}
+                      className="rounded-lg border border-indigo-200 dark:border-indigo-500/30 px-3 py-2 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
 
             {/* Approval workflow — approve/reject is restricted to admins,

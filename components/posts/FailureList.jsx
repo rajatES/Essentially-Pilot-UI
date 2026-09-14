@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, ExternalLink, ShieldOff, Ban, CloudOff, Clock, HelpCircle } from "lucide-react";
+import { AlertTriangle, ExternalLink, ShieldOff, Ban, CloudOff, Clock, HelpCircle, RotateCw, Loader2 } from "lucide-react";
 import { PLATFORM_META, PlatformIcon, fmt } from "@/lib/platformMeta";
 
 // Failure classes, matched against the recorded error text.
@@ -17,7 +17,7 @@ const CLASSES = [
     label: "Postiz down",
     icon: CloudOff,
     test: /Postiz server error|Couldn't reach Postiz|timed out/i,
-    hint: "Postiz's own hosting failed to respond, so the post never reached the platform. Nothing retries these — re-send them.",
+    hint: "Postiz's own hosting failed to respond, so the post never reached the platform. Nothing retries these on its own — use Re-send.",
   },
   {
     id: "rejected",
@@ -53,8 +53,16 @@ const CLASSES = [
 const OTHER = CLASSES[CLASSES.length - 1];
 const classify = (error) => CLASSES.find((c) => c.test.test(error || "")) || OTHER;
 
-export default function FailureList({ failures, days, truncated, error, onOpenPost, postsById }) {
+// A row can only be re-sent if we know which post it belongs to AND it never
+// got a post id back. An id means the platform accepted it, so re-sending would
+// publish a second copy — see the same guard in posts.service.retry(), which is
+// the one that actually enforces this. Here it only decides whether to offer the
+// button, because a button that always errors is worse than no button.
+const canRetry = (f) => !!f.postId && !!f.targetId && !f.externalPostId;
+
+export default function FailureList({ failures, days, truncated, error, onOpenPost, postsById, onRetry }) {
   const [activeClass, setActiveClass] = useState("all");
+  const [busy, setBusy] = useState(null); // targetId | "bulk"
 
   const counts = useMemo(() => {
     const map = {};
@@ -71,6 +79,18 @@ export default function FailureList({ failures, days, truncated, error, onOpenPo
   );
 
   const activeHint = activeClass === "all" ? null : CLASSES.find((c) => c.id === activeClass)?.hint;
+
+  const retryable = useMemo(() => visible.filter(canRetry), [visible]);
+
+  async function runRetry(rows, key) {
+    if (!onRetry || !rows.length) return;
+    setBusy(key);
+    try {
+      await onRetry(rows);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   // A feed we could not load is NOT an empty feed. Without this branch a failed
   // request renders the empty state — "No failed deliveries" — which is the
@@ -138,6 +158,30 @@ export default function FailureList({ failures, days, truncated, error, onOpenPo
         </p>
       )}
 
+      {/* Re-send everything currently listed. Scoped to the VISIBLE rows, not
+          all failures, so the reason filter above doubles as the selection —
+          "Postiz was down for four minutes" becomes one button press. Rows that
+          already reached the platform are excluded from the count and the
+          request; the wording says so rather than silently doing less than it
+          appears to. */}
+      {onRetry && retryable.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-2">
+          <RotateCw size={13} className="text-indigo-600 dark:text-indigo-400" />
+          <p className="text-xs text-indigo-900 dark:text-indigo-200">
+            {retryable.length} of {visible.length} shown {visible.length === 1 ? "failure" : "failures"} can be re-sent.
+            {retryable.length < visible.length && " The rest already reached the platform — open them and check the page."}
+          </p>
+          <button
+            onClick={() => runRetry(retryable, "bulk")}
+            disabled={busy !== null}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {busy === "bulk" ? <Loader2 size={12} className="animate-spin" /> : <RotateCw size={12} />}
+            {busy === "bulk" ? "Re-sending…" : `Re-send ${retryable.length}`}
+          </button>
+        </div>
+      )}
+
       {visible.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 py-16 text-center">
           <AlertTriangle size={32} className="mx-auto mb-3 text-slate-300 dark:text-gray-600" />
@@ -199,14 +243,42 @@ export default function FailureList({ failures, days, truncated, error, onOpenPo
 
                 <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{f.error}</p>
 
-                {post && (
-                  <button
-                    onClick={() => onOpenPost(post)}
-                    className="mt-2 flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
-                  >
-                    <ExternalLink size={11} /> Open post
-                  </button>
-                )}
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  {post && (
+                    <button
+                      onClick={() => onOpenPost(post)}
+                      className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                    >
+                      <ExternalLink size={11} /> Open post
+                    </button>
+                  )}
+
+                  {onRetry &&
+                    (canRetry(f) ? (
+                      <button
+                        onClick={() => runRetry([f], f.targetId)}
+                        disabled={busy !== null}
+                        className="flex items-center gap-1 rounded-lg border border-indigo-200 dark:border-indigo-500/30 px-2 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 disabled:opacity-50"
+                      >
+                        {busy === f.targetId ? (
+                          <Loader2 size={11} className="animate-spin" />
+                        ) : (
+                          <RotateCw size={11} />
+                        )}
+                        {busy === f.targetId ? "Re-sending…" : "Re-send"}
+                      </button>
+                    ) : (
+                      // No button, and a reason. The dangerous version of this
+                      // row is one that looks re-sendable: this target already
+                      // has a post id, so re-sending would publish a duplicate
+                      // that nobody can take back.
+                      f.externalPostId && (
+                        <span className="text-xs text-slate-500 dark:text-gray-400">
+                          Reached the platform — check the page before reposting.
+                        </span>
+                      )
+                    ))}
+                </div>
               </div>
             );
           })}
