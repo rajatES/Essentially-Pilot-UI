@@ -521,7 +521,7 @@ function AppShell() {
             <TemplatesView onUse={(t) => openCompose({ templateText: t.content || "", templateId: t.id })} />
           )}
 
-          {view === "queue" && <PostsView onOpenPost={setDetailPost} onNavigate={setView} onCompose={openCompose} />}
+          {view === "queue" && <PostsView onOpenPost={setDetailPost} onNavigate={setView} onCompose={openCompose} me={me} />}
           {view === "approvals" && <ApprovalsView me={me} />}
           {view === "calendar" && <CalendarView onOpenPost={setDetailPost} onCompose={openCompose} />}
 

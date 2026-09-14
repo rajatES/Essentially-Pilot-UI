@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, ExternalLink, ShieldOff, Ban, CloudOff, Clock, HelpCircle, RotateCw, Loader2 } from "lucide-react";
+import { AlertTriangle, ExternalLink, ShieldOff, Ban, CloudOff, Clock, HelpCircle, RotateCw, Loader2, EyeOff, Eye, Undo2 } from "lucide-react";
 import { PLATFORM_META, PlatformIcon, fmt } from "@/lib/platformMeta";
 
 // Failure classes, matched against the recorded error text.
@@ -60,7 +60,19 @@ const classify = (error) => CLASSES.find((c) => c.test.test(error || "")) || OTH
 // button, because a button that always errors is worse than no button.
 const canRetry = (f) => !!f.postId && !!f.targetId && !f.externalPostId;
 
-export default function FailureList({ failures, days, truncated, error, onOpenPost, postsById, onRetry }) {
+export default function FailureList({
+  failures,
+  days,
+  truncated,
+  error,
+  onOpenPost,
+  postsById,
+  onRetry,
+  onClear,
+  clearedCount = 0,
+  showCleared = false,
+  onToggleCleared,
+}) {
   const [activeClass, setActiveClass] = useState("all");
   const [busy, setBusy] = useState(null); // targetId | "bulk"
 
@@ -92,6 +104,16 @@ export default function FailureList({ failures, days, truncated, error, onOpenPo
     }
   }
 
+  async function runClear(args, key) {
+    if (!onClear) return;
+    setBusy(key);
+    try {
+      await onClear(args);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   // A feed we could not load is NOT an empty feed. Without this branch a failed
   // request renders the empty state — "No failed deliveries" — which is the
   // most dangerous thing this component could say, and exactly the class of
@@ -118,6 +140,46 @@ export default function FailureList({ failures, days, truncated, error, onOpenPo
         <p className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
           This list hit its row cap, so there are older failures it is not showing. Narrow the date filter to reach them.
         </p>
+      )}
+
+      {/* The cleared-rows banner. This is NOT optional chrome: clearing hides
+          real failures, so the one thing this view must never do is look empty
+          while rows sit hidden. The count comes from the server (counted
+          separately from the capped row query) and is shown to everyone, even
+          viewers who lack permission to clear or restore. */}
+      {clearedCount === null && (
+        <p className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+          Couldn&apos;t count cleared failures, so some may be hidden from this list. Use &ldquo;Show cleared&rdquo; to check.
+        </p>
+      )}
+
+      {clearedCount > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 dark:border-gray-800 bg-slate-50 dark:bg-gray-800/50 px-3 py-2">
+          <EyeOff size={13} className="text-slate-500 dark:text-gray-400" />
+          <p className="text-xs text-slate-600 dark:text-gray-300">
+            <span className="font-semibold">{clearedCount}</span> cleared{" "}
+            {clearedCount === 1 ? "failure is" : "failures are"} hidden from this list. Nothing was deleted.
+          </p>
+          {onToggleCleared && (
+            <button
+              onClick={() => onToggleCleared(!showCleared)}
+              className="ml-auto flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+            >
+              {showCleared ? <EyeOff size={11} /> : <Eye size={11} />}
+              {showCleared ? "Hide cleared" : "Show cleared"}
+            </button>
+          )}
+          {onClear && showCleared && (
+            <button
+              onClick={() => runClear({ all: true, restore: true }, "restore")}
+              disabled={busy !== null}
+              className="flex items-center gap-1 rounded-lg border border-slate-300 dark:border-gray-700 px-2 py-1 text-xs font-semibold text-slate-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 disabled:opacity-50"
+            >
+              {busy === "restore" ? <Loader2 size={11} className="animate-spin" /> : <Undo2 size={11} />}
+              Restore all
+            </button>
+          )}
+        </div>
       )}
 
       {/* Reason breakdown, which doubles as a filter. With 56 channels a bad
@@ -182,13 +244,57 @@ export default function FailureList({ failures, days, truncated, error, onOpenPo
         </div>
       )}
 
+      {/* Clear. Deliberately a quieter control than Re-send: fixing a failure is
+          the better outcome, tidying it away is second best. Two scopes —
+          exactly what the current filter shows, or the whole window — because
+          "Postiz was down and left 200 rows" is the case that would otherwise
+          push someone into deleting the posts themselves. */}
+      {onClear && !showCleared && visible.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 px-1">
+          <p className="text-xs text-slate-500 dark:text-gray-400">
+            Dealt with these? Clearing hides them from this list — the posts and their errors are kept.
+          </p>
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() => runClear({ rows: visible }, "clear-shown")}
+              disabled={busy !== null}
+              className="flex items-center gap-1 rounded-lg border border-slate-300 dark:border-gray-700 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-gray-800 disabled:opacity-50"
+            >
+              {busy === "clear-shown" ? <Loader2 size={11} className="animate-spin" /> : <EyeOff size={11} />}
+              Clear {activeClass === "all" ? "all shown" : `these ${visible.length}`}
+            </button>
+            {activeClass !== "all" && (
+              <button
+                onClick={() => {
+                  if (!confirm(`Clear every failure in the last ${days} days? Nothing is deleted — you can restore them.`)) return;
+                  runClear({ all: true }, "clear-all");
+                }}
+                disabled={busy !== null}
+                className="flex items-center gap-1 rounded-lg border border-slate-300 dark:border-gray-700 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-gray-800 disabled:opacity-50"
+              >
+                {busy === "clear-all" ? <Loader2 size={11} className="animate-spin" /> : <EyeOff size={11} />}
+                Clear all {failures.length}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {visible.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 py-16 text-center">
           <AlertTriangle size={32} className="mx-auto mb-3 text-slate-300 dark:text-gray-600" />
+          {/* The wording here is load-bearing. "No failed deliveries" must only
+              ever appear when that is literally true, so a window whose rows
+              were all cleared says so instead — otherwise clearing would have
+              turned this view into the false negative it exists to prevent. */}
           <p className="text-sm text-slate-500 dark:text-gray-400">
             {failures.length
               ? "Nothing matches the current filters."
-              : `No failed deliveries in the last ${days} days.`}
+              : clearedCount === null
+                ? `No open failures shown for the last ${days} days, but cleared ones could not be counted.`
+                : clearedCount > 0
+                  ? `No open failures in the last ${days} days — ${clearedCount} cleared ${clearedCount === 1 ? "one is" : "ones are"} hidden.`
+                  : `No failed deliveries in the last ${days} days.`}
           </p>
         </div>
       ) : (
@@ -277,6 +383,27 @@ export default function FailureList({ failures, days, truncated, error, onOpenPo
                           Reached the platform — check the page before reposting.
                         </span>
                       )
+                    ))}
+
+                  {onClear &&
+                    (f.clearedAt ? (
+                      <button
+                        onClick={() => runClear({ rows: [f], restore: true }, f.id)}
+                        disabled={busy !== null}
+                        className="ml-auto flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-gray-400 hover:underline disabled:opacity-50"
+                      >
+                        {busy === f.id ? <Loader2 size={11} className="animate-spin" /> : <Undo2 size={11} />}
+                        Restore
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => runClear({ rows: [f] }, f.id)}
+                        disabled={busy !== null}
+                        className="ml-auto flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-gray-400 hover:underline disabled:opacity-50"
+                      >
+                        {busy === f.id ? <Loader2 size={11} className="animate-spin" /> : <EyeOff size={11} />}
+                        Clear
+                      </button>
                     ))}
                 </div>
               </div>

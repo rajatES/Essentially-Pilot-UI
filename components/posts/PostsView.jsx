@@ -50,7 +50,7 @@ function derivePostType(p) {
   return "text";
 }
 
-export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
+export default function PostsView({ onOpenPost, onNavigate, onCompose, me }) {
   const showToast = useToast();
   const invalidatePosts = usePostsInvalidate();
   const optimisticPosts = useOptimisticPosts();
@@ -72,6 +72,10 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
   const [selectedPosts, setSelectedPosts] = useState([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  // Cleared failures are hidden by default; this reveals them. Same gate as the
+  // clear action itself, because seeing what was tidied away is part of it.
+  const [showCleared, setShowCleared] = useState(false);
+  const canClearFailures = me?.role === "admin" || !!me?.is_group_head;
 
   function togglePostSelect(id) {
     setSelectedPosts((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -174,6 +178,40 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
     showToast(parts.join(", ") + ".", failedAgain || skipped || errors.length ? "warn" : "ok");
   }
 
+  // How many failures are cleared (hidden) in the current window.
+  //
+  // Deliberately NOT `?? 0`: the server sends null when it could not tally the
+  // hidden rows, and collapsing that to 0 would turn "we don't know" into
+  // "there are none" — the one claim this feed must never make. Only undefined
+  // (still loading) counts as zero.
+  const clearedFailureCount = failureData === undefined ? 0 : failureData?.cleared;
+
+  // Clear (or restore) rows in the Error tab. Hides only — the posts, their
+  // errors and their history are untouched, which is what makes this safe to
+  // offer next to a Re-send button.
+  async function clearFailures({ rows, all, restore } = {}) {
+    const body = { restore: !!restore };
+    if (all) {
+      body.all = true;
+      body.days = failureData?.days ?? 90;
+    } else {
+      body.targetIds = (rows || []).map((f) => f.targetId).filter(Boolean);
+      body.postIds = (rows || []).filter((f) => !f.targetId && f.postId).map((f) => f.postId);
+      if (!body.targetIds.length && !body.postIds.length) return;
+    }
+    try {
+      const r = await apiJson("/api/posts/failures/clear", { method: "POST", body: JSON.stringify(body) });
+      showToast(
+        restore
+          ? `Restored ${r.affected} failure(s) to the list.`
+          : `Cleared ${r.affected} failure(s). Nothing was deleted — "Show cleared" brings them back.`,
+      );
+      invalidatePosts();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  }
+
   const authorMap = Object.fromEntries(authors.map((a) => [a.id, a]));
 
   // Tab counts respect the filters (but not the tab itself).
@@ -197,7 +235,7 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
   // Failure feed. Fetched even when the Error tab is closed, on purpose: its
   // badge is how anyone finds out a delivery failed at all, and a badge that
   // only counts once you click it is no warning.
-  const { data: failureData, isLoading: failuresLoading, error: failuresError } = usePostFailures();
+  const { data: failureData, isLoading: failuresLoading, error: failuresError } = usePostFailures({ includeCleared: showCleared });
   const allFailures = useMemo(() => failureData?.failures || [], [failureData]);
 
   // The same filter bar, applied to failure rows. Type is skipped — it is
@@ -362,6 +400,10 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose }) {
             onOpenPost={onOpenPost}
             postsById={postsById}
             onRetry={retryFailures}
+            onClear={canClearFailures ? clearFailures : null}
+            clearedCount={clearedFailureCount}
+            showCleared={showCleared}
+            onToggleCleared={setShowCleared}
           />
         )
       ) : isLoading ? (
