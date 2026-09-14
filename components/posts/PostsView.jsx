@@ -178,14 +178,6 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose, me }) {
     showToast(parts.join(", ") + ".", failedAgain || skipped || errors.length ? "warn" : "ok");
   }
 
-  // How many failures are cleared (hidden) in the current window.
-  //
-  // Deliberately NOT `?? 0`: the server sends null when it could not tally the
-  // hidden rows, and collapsing that to 0 would turn "we don't know" into
-  // "there are none" — the one claim this feed must never make. Only undefined
-  // (still loading) counts as zero.
-  const clearedFailureCount = failureData === undefined ? 0 : failureData?.cleared;
-
   // Clear (or restore) rows in the Error tab. Hides only — the posts, their
   // errors and their history are untouched, which is what makes this safe to
   // offer next to a Re-send button.
@@ -236,6 +228,14 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose, me }) {
   // badge is how anyone finds out a delivery failed at all, and a badge that
   // only counts once you click it is no warning.
   const { data: failureData, isLoading: failuresLoading, error: failuresError } = usePostFailures({ includeCleared: showCleared });
+
+  // How many failures are cleared (hidden) in the current window.
+  //
+  // Deliberately NOT `?? 0`: the server sends null when it could not tally the
+  // hidden rows, and collapsing that to 0 would turn "we don't know" into
+  // "there are none" — the one claim this feed must never make. Only undefined
+  // (still loading) counts as zero.
+  const clearedFailureCount = failureData === undefined ? 0 : failureData?.cleared;
   const allFailures = useMemo(() => failureData?.failures || [], [failureData]);
 
   // The same filter bar, applied to failure rows. Type is skipped — it is
