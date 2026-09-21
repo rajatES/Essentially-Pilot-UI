@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, ExternalLink, ShieldOff, Ban, CloudOff, Clock, HelpCircle, RotateCw, Loader2, EyeOff, Eye, Undo2 } from "lucide-react";
+import { AlertTriangle, ExternalLink, ShieldOff, Ban, CloudOff, Clock, HelpCircle, RotateCw, Loader2, EyeOff, Eye, Undo2, Pencil, X } from "lucide-react";
 import { PLATFORM_META, PlatformIcon, fmt } from "@/lib/platformMeta";
 
 // Failure classes, matched against the recorded error text.
@@ -24,7 +24,7 @@ const CLASSES = [
     label: "Platform rejected",
     icon: Ban,
     test: /reported this post as failed|rejected/i,
-    hint: "Postiz accepted the post, then the platform refused to publish it.",
+    hint: "Postiz accepted the post, then the platform refused to publish it. Nothing went live, so these can be re-sent — usually worth editing the caption first, since the platform objected to what was in it.",
   },
   {
     id: "rate",
@@ -53,12 +53,15 @@ const CLASSES = [
 const OTHER = CLASSES[CLASSES.length - 1];
 const classify = (error) => CLASSES.find((c) => c.test.test(error || "")) || OTHER;
 
-// A row can only be re-sent if we know which post it belongs to AND it never
-// got a post id back. An id means the platform accepted it, so re-sending would
-// publish a second copy — see the same guard in posts.service.retry(), which is
-// the one that actually enforces this. Here it only decides whether to offer the
-// button, because a button that always errors is worse than no button.
-const canRetry = (f) => !!f.postId && !!f.targetId && !f.externalPostId;
+// A row can only be re-sent if we know which post it belongs to AND nothing is
+// live behind it. A post id normally means the platform accepted it, so
+// re-sending would publish a second copy — EXCEPT where the id belongs to a post
+// we have since confirmed never published (the platform rejected it), which the
+// server reports as rejectedByPlatform. See the same guard in
+// posts.service.retry(), which is the one that actually enforces this. Here it
+// only decides whether to offer the button, because a button that always errors
+// is worse than no button.
+const canRetry = (f) => !!f.postId && !!f.targetId && (!f.externalPostId || f.rejectedByPlatform);
 
 export default function FailureList({
   failures,
@@ -75,6 +78,9 @@ export default function FailureList({
 }) {
   const [activeClass, setActiveClass] = useState("all");
   const [busy, setBusy] = useState(null); // targetId | "bulk"
+  // The row being edited before it goes out again, or null. Holds its own draft
+  // so cancelling leaves the failure exactly as it was.
+  const [editRow, setEditRow] = useState(null);
 
   const counts = useMemo(() => {
     const map = {};
@@ -94,11 +100,15 @@ export default function FailureList({
 
   const retryable = useMemo(() => visible.filter(canRetry), [visible]);
 
-  async function runRetry(rows, key) {
+  // `edit` — { body, linkUrl } — is an optional change to send INSTEAD of what
+  // the post currently says. Only ever passed for a single row: it is a caption
+  // written for one failed page, and applying it across a filtered list would
+  // rewrite posts nobody looked at.
+  async function runRetry(rows, key, edit) {
     if (!onRetry || !rows.length) return;
     setBusy(key);
     try {
-      await onRetry(rows);
+      return await onRetry(rows, edit);
     } finally {
       setBusy(null);
     }
@@ -328,6 +338,15 @@ export default function FailureList({
                   ) : (
                     <span className="font-semibold text-slate-500 dark:text-gray-400">no page reached</span>
                   )}
+                  {/* This page's caption was edited on an earlier re-send, so
+                      what is shown below is that copy rather than the post's.
+                      Without the badge the two would look identical while the
+                      post card shows something else. */}
+                  {f.edited && (
+                    <span className="rounded-full bg-amber-100 dark:bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-300">
+                      edited for this page
+                    </span>
+                  )}
                   {f.publishVia === "postiz" && (
                     <span className="rounded-full bg-slate-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500 dark:text-gray-400">
                       via postiz
@@ -361,23 +380,38 @@ export default function FailureList({
 
                   {onRetry &&
                     (canRetry(f) ? (
-                      <button
-                        onClick={() => runRetry([f], f.targetId)}
-                        disabled={busy !== null}
-                        className="flex items-center gap-1 rounded-lg border border-indigo-200 dark:border-indigo-500/30 px-2 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 disabled:opacity-50"
-                      >
-                        {busy === f.targetId ? (
-                          <Loader2 size={11} className="animate-spin" />
-                        ) : (
-                          <RotateCw size={11} />
-                        )}
-                        {busy === f.targetId ? "Re-sending…" : "Re-send"}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => runRetry([f], f.targetId)}
+                          disabled={busy !== null}
+                          className="flex items-center gap-1 rounded-lg border border-indigo-200 dark:border-indigo-500/30 px-2 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 disabled:opacity-50"
+                        >
+                          {busy === f.targetId ? (
+                            <Loader2 size={11} className="animate-spin" />
+                          ) : (
+                            <RotateCw size={11} />
+                          )}
+                          {busy === f.targetId ? "Re-sending…" : "Re-send"}
+                        </button>
+                        {/* Offered on every re-sendable row, not just the
+                            rejected ones: a failure is often a failure OF the
+                            content, and sending the identical caption back at
+                            the platform that just refused it is the one retry
+                            guaranteed to fail again. */}
+                        <button
+                          onClick={() => setEditRow(f)}
+                          disabled={busy !== null}
+                          className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-gray-800 px-2 py-1 text-xs font-semibold text-slate-600 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-gray-800/50 disabled:opacity-50"
+                        >
+                          <Pencil size={11} /> Edit &amp; re-send
+                        </button>
+                      </>
                     ) : (
                       // No button, and a reason. The dangerous version of this
                       // row is one that looks re-sendable: this target already
-                      // has a post id, so re-sending would publish a duplicate
-                      // that nobody can take back.
+                      // has a post id and nothing has confirmed the post failed
+                      // to go live, so re-sending could publish a duplicate that
+                      // nobody can take back.
                       f.externalPostId && (
                         <span className="text-xs text-slate-500 dark:text-gray-400">
                           Reached the platform — check the page before reposting.
@@ -411,6 +445,126 @@ export default function FailureList({
           })}
         </div>
       )}
+
+      {editRow && (
+        <EditRetryModal
+          row={editRow}
+          busy={busy === editRow.targetId}
+          onCancel={() => setEditRow(null)}
+          onSubmit={async (edit) => {
+            // Kept open until the send actually goes through: closing first
+            // would throw away a caption someone just wrote the moment the
+            // request fails, which is exactly when they want it back.
+            const ok = await runRetry([editRow], editRow.targetId, edit);
+            if (ok !== false) setEditRow(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Edit one failed delivery, then send it again.
+//
+// The draft starts from what THIS page was actually going to publish — which is
+// the post's caption unless a previous re-send already edited it for this page
+// (the server resolves that; see failureRow). Re-offering the original after an
+// edit would quietly undo the earlier one.
+//
+// The edit is deliberately scoped to this page. Where the post also published
+// elsewhere the server keeps it as a per-page override rather than rewriting the
+// post, so the pages that are already live keep the caption they are actually
+// showing. The note below says so, because an editor that looks like it changes
+// the post while changing one page would be worse than no editor.
+function EditRetryModal({ row, busy, onCancel, onSubmit }) {
+  const [body, setBody] = useState(row.body || "");
+  const [linkUrl, setLinkUrl] = useState(row.linkUrl || "");
+  const unchanged = body === (row.body || "") && linkUrl === (row.linkUrl || "");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={busy ? undefined : onCancel}>
+      <div
+        className="w-full max-w-lg overflow-hidden rounded-xl bg-white dark:bg-gray-900 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-gray-800 px-5 py-4">
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-800 dark:text-white">Edit &amp; re-send</p>
+            <p className="truncate text-xs text-slate-500 dark:text-gray-400">
+              {row.channel || "this page"}
+            </p>
+          </div>
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-lg p-1.5 text-slate-400 dark:text-gray-500 hover:bg-slate-100 dark:hover:bg-gray-800 disabled:opacity-50"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <p className="rounded-lg bg-red-50 dark:bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+            {row.error}
+          </p>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
+              Caption &amp; hashtags
+            </label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={7}
+              maxLength={5000}
+              className="w-full resize-none rounded-lg border border-slate-200 dark:border-gray-800 bg-transparent px-3 py-2.5 text-sm text-slate-800 dark:text-gray-100 outline-none focus:border-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-gray-500">
+              Link
+            </label>
+            <input
+              type="url"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://…"
+              className="w-full rounded-lg border border-slate-200 dark:border-gray-800 bg-transparent px-3 py-2 text-sm text-slate-800 dark:text-gray-100 outline-none focus:border-indigo-500"
+            />
+            <p className="mt-1 text-xs text-slate-400 dark:text-gray-500">
+              Clearing this sends the caption with no link attached.
+            </p>
+          </div>
+
+          <p className="rounded-lg bg-slate-50 dark:bg-gray-800/50 px-3 py-2 text-xs text-slate-500 dark:text-gray-400">
+            This changes what goes out to {row.channel || "this page"} only. Any page that already
+            published this post keeps the caption it is showing.
+          </p>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={onCancel}
+              disabled={busy}
+              className="flex-1 rounded-lg border border-slate-200 dark:border-gray-800 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-gray-800/50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              // Nothing touched → a plain re-send. Sending the identical text
+              // back as an "edit" would pin it to this page as an override and
+              // badge the row as edited, both for no change at all.
+              onClick={() => onSubmit(unchanged ? undefined : { body: body.trim(), linkUrl: linkUrl.trim() || null })}
+              disabled={busy || !body.trim()}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+              title={!body.trim() ? "A caption is required." : undefined}
+            >
+              {busy ? <Loader2 size={15} className="animate-spin" /> : <RotateCw size={15} />}
+              {busy ? "Re-sending…" : unchanged ? "Re-send unchanged" : "Save & re-send"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

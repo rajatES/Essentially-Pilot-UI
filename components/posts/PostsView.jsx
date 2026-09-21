@@ -130,12 +130,26 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose, me }) {
   // in bulk; either way they are grouped by post, because /api/posts/retry
   // retries the failed TARGETS of one post and a single filtered view routinely
   // spans many posts (one bad hour = dozens of posts, one cause).
-  async function retryFailures(rows) {
-    const eligible = (rows || []).filter((f) => f.postId && f.targetId && !f.externalPostId);
+  //
+  // `edit` — { body, linkUrl } from the Edit & re-send dialog — replaces what
+  // goes out. It only ever accompanies a single row, and is ignored otherwise:
+  // one caption cannot sensibly stand in for a filtered list of different posts,
+  // and applying it to them anyway would rewrite content nobody reviewed.
+  //
+  // Returns false when nothing went out, so the caller can keep an edit dialog
+  // open rather than discarding the caption someone just typed.
+  async function retryFailures(rows, edit) {
+    // Mirrors canRetry in FailureList and the guard in posts.service.retry():
+    // a post id means the page is live unless the platform is known to have
+    // rejected it, in which case nothing was published and re-sending is safe.
+    const eligible = (rows || []).filter(
+      (f) => f.postId && f.targetId && (!f.externalPostId || f.rejectedByPlatform),
+    );
     if (!eligible.length) {
       showToast("Nothing here can be re-sent — those pages already received the post.", "warn");
-      return;
+      return false;
     }
+    const content = edit && eligible.length === 1 ? edit : null;
 
     const byPost = new Map();
     for (const f of eligible) {
@@ -155,7 +169,11 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose, me }) {
       try {
         const r = await apiJson("/api/posts/retry", {
           method: "POST",
-          body: JSON.stringify({ postId, targetIds }),
+          body: JSON.stringify({
+            postId,
+            targetIds,
+            ...(content ? { body: content.body, linkUrl: content.linkUrl } : {}),
+          }),
         });
         published += r.published || 0;
         failedAgain += r.failed || 0;
@@ -169,13 +187,17 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose, me }) {
 
     if (errors.length && !published && !failedAgain) {
       showToast(errors[0], "error");
-      return;
+      return false;
     }
     const parts = [`${published} sent`];
     if (failedAgain) parts.push(`${failedAgain} failed again`);
     if (skipped) parts.push(`${skipped} skipped`);
     if (errors.length) parts.push(`${errors.length} request(s) errored`);
     showToast(parts.join(", ") + ".", failedAgain || skipped || errors.length ? "warn" : "ok");
+    // An edit that was accepted and then failed on the platform again counts as
+    // delivered here on purpose: the new caption IS saved against that page, so
+    // reopening the dialog on the old text would be the misleading answer.
+    return true;
   }
 
   // Clear (or restore) rows in the Error tab. Hides only — the posts, their

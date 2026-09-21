@@ -48,9 +48,12 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
   const [retryAt, setRetryAt] = useState(""); // empty = send now
 
   // A failed target that already carries an external_post_id reached the
-  // platform, so re-sending it would publish a duplicate. Mirrors the guard in
+  // platform, so re-sending it would publish a duplicate — unless that post was
+  // afterwards confirmed to have been rejected (publish_rejected_at), which
+  // means the id exists but nothing is live behind it. Mirrors the guard in
   // posts.service.retry(), which is what actually refuses it.
-  const failedTargets = (post.post_targets || []).filter((t) => t.status === "failed" && !t.external_post_id);
+  const canResend = (t) => t.status === "failed" && (!t.external_post_id || !!t.publish_rejected_at);
+  const failedTargets = (post.post_targets || []).filter(canResend);
 
   // Re-send failed pages. Without a time this publishes immediately; with one
   // the targets go back on the queue for the cron run to pick up.
@@ -310,6 +313,16 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
                         {t.status === "failed" && t.last_error && (
                           <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t.last_error}</p>
                         )}
+                        {/* This page carries its own copy, written when someone
+                            edited a failed delivery before re-sending it. The
+                            caption above the target list is the POST's, so
+                            without this the difference would be invisible. */}
+                        {t.content_override?.body && (
+                          <p className="mt-1 whitespace-pre-wrap rounded-lg bg-amber-50 dark:bg-amber-500/10 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-300">
+                            <span className="font-semibold">Edited for this page: </span>
+                            {t.content_override.body}
+                          </p>
+                        )}
                       </div>
                       {/* Shown for every sent page, link or not. The disabled
                           state carries the reason (see ViewPostLink) — hiding it
@@ -329,8 +342,9 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
 
                       {/* Re-send just this page. Offered only where it is safe:
                           a failed target with no post id never reached the
-                          platform, so there is no duplicate to create. */}
-                      {t.status === "failed" && !t.external_post_id && (
+                          platform, and a rejected one left nothing behind, so
+                          neither can produce a duplicate. */}
+                      {canResend(t) && (
                         <button
                           onClick={() => retryTargets([t.id], t.id)}
                           disabled={retryBusy !== null}
@@ -341,7 +355,7 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
                         </button>
                       )}
 
-                      {t.status === "failed" && t.external_post_id && (
+                      {t.status === "failed" && t.external_post_id && !t.publish_rejected_at && (
                         <span className="shrink-0 text-xs text-slate-500 dark:text-gray-400" title="This page returned a post id, so the post is live there. Re-sending would duplicate it.">
                           on platform
                         </span>
