@@ -9,15 +9,20 @@ import { PLATFORM_META, PlatformIcon } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
 import ViewPostLink, { pickViewableTarget } from "@/components/common/ViewPostLink";
 
+// Day presets, plus "Custom" which reveals the two date pickers. The presets
+// stay because they are what almost every visit wants; the custom range is for
+// the question a preset can't ask ("how did the finals week do?").
 const RANGES = [
-  [7, "7d"],
-  [14, "14d"],
-  [30, "30d"],
-  [90, "90d"],
+  ["7", "7d"],
+  ["14", "14d"],
+  ["30", "30d"],
+  ["90", "90d"],
+  ["custom", "Custom"],
 ];
 
 const SORTS = [
   ["engagement", "Most engagement"],
+  ["views", "Most views"],
   ["likes", "Most likes"],
   ["comments", "Most comments"],
   ["shares", "Most shares"],
@@ -31,6 +36,12 @@ const TYPE_OPTIONS = [
   ["link", "Link"],
   ["text", "Text only"],
 ];
+
+// A Date as YYYY-MM-DD in the VIEWER's timezone, which is what an <input
+// type="date"> expects. toISOString() would be UTC and can land a day off.
+function localDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 // Compact number formatting (1.2K / 3.4M).
 function fmt(n) {
@@ -56,7 +67,9 @@ function Kpi({ icon: Icon, label, value, sub }) {
 export default function PerformanceView() {
   const qc = useQueryClient();
   const showToast = useToast();
-  const [days, setDays] = useState(30);
+  const [preset, setPreset] = useState("30");
+  const [start, setStart] = useState(() => localDate(new Date(Date.now() - 30 * 86400000)));
+  const [end, setEnd] = useState(() => localDate(new Date()));
   const [platform, setPlatform] = useState("all");
   const [sport, setSport] = useState("all");
   const [pageFilter, setPageFilter] = useState("all");
@@ -64,13 +77,43 @@ export default function PerformanceView() {
   const [sortKey, setSortKey] = useState("engagement");
   const [refreshing, setRefreshing] = useState(false);
 
-  const { data, isLoading } = useInsights(days);
-  const posts = useMemo(() => data?.posts || [], [data]);
+  // One place that turns the range controls into a request, so the list and the
+  // refresh below can never disagree about which window is on screen.
+  const range = useMemo(
+    () => (preset === "custom" ? { start, end } : { days: Number(preset) }),
+    [preset, start, end],
+  );
+
+  // A custom range with a date cleared is not a range. Nothing is fetched until
+  // both are set: sending it would fall back to the last-30-days default and
+  // put 30 days of numbers under a header that says something else.
+  const rangeReady = preset !== "custom" || (!!start && !!end);
+
+  const { data, isLoading, error } = useInsights({ ...range, enabled: rangeReady });
+  // Emptied while the range is unusable. The held-back query falls back to the
+  // last-30-days cache key, so without this the KPIs would quietly show 30 days
+  // of numbers under a header that says "Custom".
+  const posts = useMemo(() => (rangeReady ? data?.posts || [] : []), [data, rangeReady]);
+
+  // Moving off Custom re-points the pickers at the preset, so switching back
+  // starts from the range just looked at instead of a stale one.
+  function pickPreset(v) {
+    setPreset(v);
+    if (v !== "custom") {
+      setEnd(localDate(new Date()));
+      setStart(localDate(new Date(Date.now() - Number(v) * 86400000)));
+    }
+  }
 
   async function refreshAll() {
+    if (!rangeReady) return;
     setRefreshing(true);
     try {
-      const r = await apiJson("/api/insights/refresh", { method: "POST", body: JSON.stringify({}) });
+      // The same window the list is showing. Refresh defaults to the last 30
+      // days server-side, so without this a longer range would re-pull metrics
+      // for everything EXCEPT the older posts on screen — the ones most likely
+      // to be missing them.
+      const r = await apiJson("/api/insights/refresh", { method: "POST", body: JSON.stringify(range) });
       qc.invalidateQueries({ queryKey: ["insights"] });
       showToast(`Refreshed ${r.synced} post target(s)${r.failed ? `, ${r.failed} failed` : ""}.`, r.failed ? "warn" : "ok");
     } catch (e) {
@@ -94,6 +137,7 @@ export default function PerformanceView() {
     });
     const sorters = {
       engagement: (a, b) => b.engagement - a.engagement,
+      views: (a, b) => (b.views || 0) - (a.views || 0),
       likes: (a, b) => b.likes - a.likes,
       comments: (a, b) => b.comments - a.comments,
       shares: (a, b) => b.shares - a.shares,
@@ -103,13 +147,18 @@ export default function PerformanceView() {
   }, [posts, platform, sport, pageFilter, postType, sortKey]);
 
   const totals = useMemo(() => {
-    const t = { posts: filtered.length, withInsights: 0, likes: 0, comments: 0, shares: 0, engagement: 0 };
+    const t = { posts: filtered.length, withInsights: 0, likes: 0, comments: 0, shares: 0, engagement: 0, views: 0, withViews: 0 };
     for (const p of filtered) {
       if (p.hasInsights) t.withInsights++;
       t.likes += p.likes;
       t.comments += p.comments;
       t.shares += p.shares;
       t.engagement += p.engagement;
+      t.views += p.views || 0;
+      // Counted separately because views are the patchiest metric here: a
+      // platform that doesn't report them leaves null, and a total summed over
+      // those reads as "these posts got few views" rather than "we don't know".
+      if (p.views) t.withViews++;
     }
     return t;
   }, [filtered]);
@@ -136,25 +185,50 @@ export default function PerformanceView() {
           <h2 className="flex items-center gap-2 text-xl font-bold text-slate-800 dark:text-white">
             <TrendingUp size={20} /> Performance
           </h2>
-          <p className="text-sm text-slate-500 dark:text-gray-400">
-            Engagement on published posts, fetched by post ID from each platform{data?.windowDays ? ` · last ${data.windowDays} days` : ""}.
+          {/* Says the range actually in force. "last N days" would be wrong for
+              a custom one, and a header that quietly mislabels the window makes
+              every number under it unreadable. */}
+          <p className="text-sm text-slate-500 dark:text-gray-400" suppressHydrationWarning>
+            Engagement on published posts, fetched by post ID from each platform
+            {data?.custom ? ` · ${data.start} to ${data.end}` : data?.windowDays ? ` · last ${data.windowDays} days` : ""}.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex overflow-hidden rounded-lg border border-slate-200 dark:border-gray-700">
-            {RANGES.map(([d, label]) => (
+            {RANGES.map(([value, label]) => (
               <button
-                key={d}
-                onClick={() => setDays(d)}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${days === d ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-900 text-slate-600 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-gray-800"}`}
+                key={value}
+                onClick={() => pickPreset(value)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${preset === value ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-900 text-slate-600 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-gray-800"}`}
               >
                 {label}
               </button>
             ))}
           </div>
+          {preset === "custom" && (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={start}
+                max={end}
+                onChange={(e) => setStart(e.target.value)}
+                aria-label="Range start"
+                className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-xs text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500"
+              />
+              <span className="text-xs text-slate-400 dark:text-gray-500">to</span>
+              <input
+                type="date"
+                value={end}
+                min={start}
+                onChange={(e) => setEnd(e.target.value)}
+                aria-label="Range end"
+                className="rounded-lg border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-2 py-1.5 text-xs text-slate-700 dark:text-gray-200 outline-none focus:border-indigo-500"
+              />
+            </div>
+          )}
           <button
             onClick={refreshAll}
-            disabled={refreshing}
+            disabled={refreshing || !rangeReady}
             className="flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             title="Fetch the latest metrics from each platform now"
           >
@@ -163,15 +237,51 @@ export default function PerformanceView() {
         </div>
       </div>
 
+      {/* A range that could not be read at all. Shown instead of leaving the
+          numbers below to render as a confident row of zeroes. */}
+      {error && (
+        <p className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+          Couldn&apos;t load performance for this range — the figures below are not a result. {error.message}
+        </p>
+      )}
+
+      {/* The row cap, which only a custom range can realistically reach. Every
+          total on this page is summed over the rows that came back, so saying
+          nothing here would turn a partial window into a wrong number. */}
+      {data?.truncated && (
+        <p className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+          This range has more than {data.limit} published posts, so everything below covers only the {data.limit} most
+          recent. Narrow the dates to reach the rest.
+        </p>
+      )}
+
       {/* KPI row */}
+      {rangeReady && (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Kpi icon={BarChart3} label="Posts" value={totals.posts} sub={`${totals.withInsights} with insights`} />
         <Kpi icon={TrendingUp} label="Engagement" value={fmt(totals.engagement)} sub={totals.posts ? `${fmt(Math.round(totals.engagement / totals.posts))}/post` : "—"} />
+        {/* Views carries its own denominator: not every platform reports it, so
+            a bare total invites "we barely got views" when the real answer is
+            "most of these posts never told us". */}
+        <Kpi
+          icon={Eye}
+          label="Views"
+          value={fmt(totals.views)}
+          sub={
+            totals.withViews === 0
+              ? totals.withInsights
+                ? "not reported for these"
+                : undefined
+              : totals.withViews < totals.posts
+                ? `${totals.withViews} of ${totals.posts} posts reporting`
+                : undefined
+          }
+        />
         <Kpi icon={Heart} label="Likes" value={fmt(totals.likes)} />
         <Kpi icon={MessageCircle} label="Comments" value={fmt(totals.comments)} />
         <Kpi icon={Share2} label="Shares" value={fmt(totals.shares)} />
-        <Kpi icon={Eye} label="Avg engagement" value={totals.posts ? fmt(Math.round(totals.engagement / totals.posts)) : "0"} sub="per post" />
       </div>
+      )}
 
       {/* Top pages */}
       {topPages.length > 0 && (
@@ -215,7 +325,11 @@ export default function PerformanceView() {
       </div>
 
       {/* Post list */}
-      {isLoading ? (
+      {!rangeReady ? (
+        <div className="rounded-xl border border-dashed border-slate-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-5 py-12 text-center">
+          <p className="text-sm text-slate-500 dark:text-gray-400">Pick both a start and an end date to see this range.</p>
+        </div>
+      ) : isLoading ? (
         <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100 dark:bg-gray-800" />)}</div>
       ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-12 text-center shadow-sm">
@@ -257,6 +371,10 @@ export default function PerformanceView() {
               <div className="flex shrink-0 items-center gap-3 text-xs">
                 {p.hasInsights ? (
                   <>
+                    {/* null, not 0, when the platform did not report views —
+                        Metric renders that as a dash rather than inventing a
+                        zero that reads like a real measurement. */}
+                    <Metric icon={Eye} value={p.views} title="Views" />
                     <Metric icon={Heart} value={p.likes} />
                     <Metric icon={MessageCircle} value={p.comments} />
                     <Metric icon={Share2} value={p.shares} />
@@ -285,10 +403,10 @@ function viewTarget(post) {
   return viewTargetCache.get(post);
 }
 
-function Metric({ icon: Icon, value }) {
+function Metric({ icon: Icon, value, title }) {
   return (
-    <span className="flex items-center gap-1 text-slate-500 dark:text-gray-400">
-      <Icon size={13} /> {fmt(value)}
+    <span className="flex items-center gap-1 text-slate-500 dark:text-gray-400" title={title}>
+      <Icon size={13} /> {value == null ? "—" : fmt(value)}
     </span>
   );
 }
