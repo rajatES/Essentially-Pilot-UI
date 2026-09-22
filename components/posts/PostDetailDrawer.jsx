@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Clock, ExternalLink, FileText, History, Pencil, RefreshCw, ShieldCheck, Trash2, Webhook, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, ExternalLink, FileText, History, Pencil, RefreshCw, ShieldCheck, Trash, Trash2, Webhook, X, XCircle } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
 import ViewPostLink from "@/components/common/ViewPostLink";
 import { STATUS_STYLES, statusLabel, fmt, PlatformIcon } from "@/lib/platformMeta";
@@ -46,6 +46,20 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
   const [reviewComment, setReviewComment] = useState("");
   const [retryBusy, setRetryBusy] = useState(null); // targetId | "all"
   const [retryAt, setRetryAt] = useState(""); // empty = send now
+  const [unpublishBusy, setUnpublishBusy] = useState(null); // targetId
+
+  // Taking a live post down is possible on Facebook and YouTube and nowhere
+  // else — Instagram's API has no delete, and the Postiz-relayed channels
+  // (Threads, standalone Instagram, X) expose none we can reach. The server
+  // enforces this; here it only decides whether to offer the button, because a
+  // button that always errors is worse than no button. Admin/Group Head only,
+  // matching the server.
+  const canDeleteLive = me?.role === "admin" || !!me?.is_group_head;
+  const deletableTarget = (t) =>
+    t.status === "sent" &&
+    !!t.external_post_id &&
+    (t.social_accounts?.publish_via || "native") !== "postiz" &&
+    ["facebook", "youtube"].includes(t.social_accounts?.platform || t.platform);
 
   // A failed target that already carries an external_post_id reached the
   // platform, so re-sending it would publish a duplicate — unless that post was
@@ -86,6 +100,43 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
       showToast(err.message, "error");
     } finally {
       setRetryBusy(null);
+    }
+  }
+
+  // Delete the LIVE post from one page. Irreversible in a way nothing else in
+  // this app is, so it confirms with the page named — and it deletes only the
+  // page asked for, never the whole fan-out.
+  async function unpublishTarget(target) {
+    const channel = target.social_accounts?.display_name || "this page";
+    if (
+      !confirm(
+        `Delete this post from ${channel}?\n\nIt will be removed from the platform for everyone, along with its likes and comments. This cannot be undone.\n\nOther pages are not affected.`,
+      )
+    ) {
+      return;
+    }
+    setUnpublishBusy(target.id);
+    try {
+      const r = await apiJson("/api/posts/unpublish", {
+        method: "POST",
+        body: JSON.stringify({ postId: post.id, targetIds: [target.id] }),
+      });
+      const failed = (r.failed || [])[0];
+      if (failed) {
+        showToast(`Couldn't delete from ${channel}: ${failed.error}`, "error");
+      } else if ((r.skipped || []).length) {
+        showToast(r.skipped[0].reason, "warn");
+      } else {
+        showToast(`Deleted from ${channel}.`);
+      }
+      const fresh = await apiJson(`/api/posts`);
+      const updated = (fresh?.posts || []).find((p) => p.id === post.id);
+      if (updated) setPost(updated);
+      invalidatePosts();
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setUnpublishBusy(null);
     }
   }
 
@@ -353,6 +404,27 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
                           <RefreshCw size={12} className={retryBusy === t.id ? "animate-spin" : ""} />
                           {retryBusy === t.id ? "Sending…" : "Re-send"}
                         </button>
+                      )}
+
+                      {/* Delete from the platform. Offered only where it can
+                          actually work; every other channel is told to do it by
+                          hand rather than shown a button that lies. */}
+                      {canDeleteLive && deletableTarget(t) && (
+                        <button
+                          onClick={() => unpublishTarget(t)}
+                          disabled={unpublishBusy !== null}
+                          title="Delete this post from the platform — permanent"
+                          className="flex shrink-0 items-center gap-1 rounded-lg border border-red-200 dark:border-red-500/30 px-2.5 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50"
+                        >
+                          <Trash size={12} className={unpublishBusy === t.id ? "animate-pulse" : ""} />
+                          {unpublishBusy === t.id ? "Deleting…" : "Delete live"}
+                        </button>
+                      )}
+
+                      {t.status === "deleted" && (
+                        <span className="shrink-0 text-xs text-slate-500 dark:text-gray-400" title="Removed from the platform from inside this app.">
+                          removed
+                        </span>
                       )}
 
                       {t.status === "failed" && t.external_post_id && !t.publish_rejected_at && (
