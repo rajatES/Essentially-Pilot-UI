@@ -39,7 +39,7 @@ function localDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export default function PostAnalyticsView() {
+export default function PostAnalyticsView({ me }) {
   const qc = useQueryClient();
   const showToast = useToast();
 
@@ -80,6 +80,49 @@ export default function PostAnalyticsView() {
   const accounts = useMemo(() => postsData?.accounts || [], [postsData]);
 
   const rows = useMemo(() => data?.rows || [], [data]);
+
+  // Deleting a LIVE post, from the table that lists them. Same rule as the post
+  // drawer and the same rule the server enforces: Facebook and YouTube, natively
+  // connected, admin/Group Head. Organic rows are excluded on top of that —
+  // those are posts the app never published (synced in from the page), and
+  // taking down someone else's post is a bigger claim than this feature makes.
+  const canDeleteLive = me?.role === "admin" || !!me?.is_group_head;
+  const deletableRow = (r) =>
+    canDeleteLive &&
+    r.origin === "app" &&
+    !!r.postId &&
+    !!r.targetId &&
+    !!r.externalPostId &&
+    r.status === "sent" &&
+    (r.publishVia || "native") !== "postiz" &&
+    ["facebook", "youtube"].includes(r.platform);
+
+  async function deleteLive(row) {
+    const channel = row.page || "this page";
+    if (
+      !confirm(
+        `Delete this post from ${channel}?\n\nIt will be removed from the platform for everyone, along with its likes and comments. This cannot be undone.\n\nOther pages are not affected.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      const r = await apiJson("/api/posts/unpublish", {
+        method: "POST",
+        body: JSON.stringify({ postId: row.postId, targetIds: [row.targetId] }),
+      });
+      const failed = (r.failed || [])[0];
+      if (failed) showToast(`Couldn't delete from ${channel}: ${failed.error}`, "error");
+      else if ((r.skipped || []).length) showToast(r.skipped[0].reason, "warn");
+      else showToast(`Deleted from ${channel}.`);
+      // The row stays in the table — it still has metrics worth reading — but
+      // its status becomes "deleted", which is what stops the action being
+      // offered twice.
+      qc.invalidateQueries({ queryKey: ["post-analytics"] });
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  }
 
   // Close the page dropdown on outside click.
   useEffect(() => {
@@ -415,7 +458,7 @@ export default function PostAnalyticsView() {
               <p className="mt-1 text-sm text-slate-500 dark:text-gray-400">Publish posts, then hit <strong>Refresh</strong> to pull their metrics.</p>
             </div>
           ) : viewMode === "list" ? (
-            <PostTable rows={pageRows} cols={cols} sort={sort} onSort={toggleSort} />
+            <PostTable rows={pageRows} cols={cols} sort={sort} onSort={toggleSort} onDeleteLive={deleteLive} canDeleteRow={deletableRow} />
           ) : (
             <PostGrid rows={pageRows} />
           )}
@@ -552,7 +595,7 @@ function Thumb({ url, imgClassName, boxClassName, iconSize = 18 }) {
 const alignCls = (a) => (a === "right" ? "text-right" : a === "center" ? "text-center" : "text-left");
 const TYPE_ICON = { video: Video, photo: ImageIcon, link: Link2, text: FileText };
 
-function PostTable({ rows, cols, sort, onSort }) {
+function PostTable({ rows, cols, sort, onSort, onDeleteLive, canDeleteRow }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
       {/* Single scroll region (both axes) with a sticky header + sticky first
@@ -587,7 +630,7 @@ function PostTable({ rows, cols, sort, onSort }) {
             {rows.map((r) => (
               <tr key={r.rowId} className="group">
                 <td className="sticky left-0 z-10 min-w-[460px] border-b border-r border-slate-100 bg-white px-4 py-3 group-hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-900 dark:group-hover:bg-gray-800/40">
-                  <TitleCell row={r} />
+                  <TitleCell row={r} onDeleteLive={onDeleteLive} canDeleteRow={canDeleteRow} />
                 </td>
                 {cols.map((c) => (
                   <td key={c.key} className={`whitespace-nowrap border-b border-slate-100 px-4 py-3 group-hover:bg-slate-50 dark:border-gray-800 dark:group-hover:bg-gray-800/40 ${alignCls(c.align)}`}>
@@ -612,7 +655,7 @@ function renderMetric(row, col) {
 
 // Fixed identity block: thumbnail + platform badge, caption, and a
 // type · page sub-line — plus the per-row View / ⋯ actions.
-function TitleCell({ row }) {
+function TitleCell({ row, onDeleteLive, canDeleteRow }) {
   const url = row.externalPostId ? externalPostUrl(row.platform, row.externalPostId, row.permalink) : null;
   const TIcon = TYPE_ICON[row.postType] || FileText;
   return (
@@ -639,14 +682,14 @@ function TitleCell({ row }) {
           ) : null}
         </p>
       </div>
-      <RowActions row={row} url={url} />
+      <RowActions row={row} url={url} onDeleteLive={onDeleteLive} canDeleteRow={canDeleteRow} />
     </div>
   );
 }
 
 // View link + a ⋯ menu (copy caption / post ID). The menu is fixed-positioned
 // so it isn't clipped by the table's horizontal-scroll container.
-function RowActions({ row, url }) {
+function RowActions({ row, url, onDeleteLive, canDeleteRow }) {
   const [menu, setMenu] = useState(null);
   const btnRef = useRef(null);
   useEffect(() => {
@@ -699,6 +742,22 @@ function RowActions({ row, url }) {
           className="w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg dark:border-gray-800 dark:bg-gray-900">
           <button onClick={() => copy(row.title)} className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 dark:text-gray-200 dark:hover:bg-gray-800">Copy caption</button>
           <button onClick={() => copy(row.externalPostId)} className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50 dark:text-gray-200 dark:hover:bg-gray-800">Copy post ID</button>
+          {/* Only where it can actually work. Instagram and the Postiz-relayed
+              channels have no delete we can reach, and a menu entry that always
+              errors is worse than one that isn't there. */}
+          {canDeleteRow?.(row) && (
+            <button
+              onClick={() => { setMenu(null); onDeleteLive(row); }}
+              className="block w-full border-t border-slate-100 px-3 py-1.5 text-left font-medium text-red-600 hover:bg-red-50 dark:border-gray-800 dark:text-red-400 dark:hover:bg-red-500/10"
+            >
+              Delete from platform
+            </button>
+          )}
+          {row.status === "deleted" && (
+            <p className="border-t border-slate-100 px-3 py-1.5 text-xs text-slate-400 dark:border-gray-800 dark:text-gray-500">
+              Removed from the platform
+            </p>
+          )}
         </div>,
         document.body,
       )}

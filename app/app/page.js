@@ -513,7 +513,7 @@ function AppShell() {
           {view === "queues" && <QueueEditorView accounts={accounts} />}
           {view === "team" && <TeamView />}
           {view === "performance" && <PerformanceView />}
-          {view === "postAnalytics" && <PostAnalyticsView />}
+          {view === "postAnalytics" && <PostAnalyticsView me={me} />}
           {view === "apiActivity" && <ApiActivityView onOpenPost={setDetailPost} onCompose={openCompose} />}
           {view === "designTemplates" && <DesignTemplatesView />}
 
