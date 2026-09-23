@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { FileText, LayoutList, Search, Users, X } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
+import { localInputToIso } from "@/lib/localTime";
 import { PLATFORM_META } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
 import { usePostsData, usePostsInvalidate, useOptimisticPosts, usePostFailures } from "@/lib/queries";
@@ -398,7 +399,7 @@ export default function PostsView({ onOpenPost, onNavigate, onCompose, me }) {
           <span className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">{selectedPosts.length} selected</span>
           <input
             type="datetime-local"
-            onChange={(e) => { if (e.target.value) { bulkReschedulePosts(new Date(e.target.value).toISOString()); e.target.value = ""; } }}
+            onChange={(e) => { if (e.target.value) { bulkReschedulePosts(localInputToIso(e.target.value)); e.target.value = ""; } }}
             disabled={bulkBusy}
             className="rounded-lg border border-indigo-200 dark:border-indigo-500/30 bg-white dark:bg-gray-900 px-2 py-1.5 text-xs text-indigo-700 dark:text-indigo-400 outline-none"
             title="Reschedule selected"

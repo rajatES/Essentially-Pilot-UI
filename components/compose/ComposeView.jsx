@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { AlertCircle, ExternalLink, FileText, Hash, MessageSquare, Tag, X } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
+import { localInputToIso } from "@/lib/localTime";
 import { useToast } from "@/components/common/ToastProvider";
 import { usePostsData, usePostsInvalidate } from "@/lib/queries";
 import { validateComposer } from "@/lib/platformRules";
@@ -152,7 +153,7 @@ export default function ComposeView({ prefill, appSettings, me, templates, onNav
           method: "POST",
           body: JSON.stringify({
             ...basePayload(),
-            scheduledFor: state.scheduledFor ? new Date(state.scheduledFor).toISOString() : null,
+            scheduledFor: localInputToIso(state.scheduledFor),
           }),
         });
         const base = result.publishedNow ? "Posted now!" : "Scheduled!";

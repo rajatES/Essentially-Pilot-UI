@@ -8,6 +8,7 @@ import ViewPostLink from "@/components/common/ViewPostLink";
 import { STATUS_STYLES, statusLabel, fmt, PlatformIcon } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
 import { usePostsInvalidate } from "@/lib/queries";
+import { toLocalInput, localInputToIso } from "@/lib/localTime";
 
 // Live "auto-approves in …" countdown for a pending post with a deadline.
 function AutoApproveCountdown({ at }) {
@@ -24,12 +25,6 @@ function AutoApproveCountdown({ at }) {
   const s = Math.floor((ms % 60000) / 1000);
   const label = h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
   return <p className="text-xs text-amber-700 dark:text-amber-300">⏱ Auto-approves in {label} unless reviewed first.</p>;
-}
-
-function toLocalInput(iso) {
-  const d = new Date(iso);
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16);
 }
 
 // Post detail drawer (view + edit + approval actions), extracted from
@@ -79,7 +74,7 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
         body: JSON.stringify({
           postId: post.id,
           targetIds,
-          scheduledFor: retryAt ? new Date(retryAt).toISOString() : null,
+          scheduledFor: localInputToIso(retryAt),
         }),
       });
       if (r.queued) {
@@ -161,7 +156,10 @@ export default function PostDetailDrawer({ post: initialPost, authors, me, apiKe
     try {
       const payload = { body: editDraft.body, linkUrl: editDraft.linkUrl || null };
       if (post.status === "scheduled" && editDraft.scheduledFor) {
-        payload.scheduledFor = editDraft.scheduledFor;
+        // Converted here, in the browser, where "local" means the viewer's
+        // timezone. Sending the raw input value shifted every edited schedule
+        // by the viewer's UTC offset — see lib/localTime.
+        payload.scheduledFor = localInputToIso(editDraft.scheduledFor);
       }
       const r = await apiJson(`/api/posts/${post.id}`, { method: "PATCH", body: JSON.stringify(payload) });
       setPost(r.post);

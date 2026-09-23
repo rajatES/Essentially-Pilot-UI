@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { runCompliance } from "@/lib/compliance";
 import { apiFetch } from "@/lib/apiClient";
+import { localInputToIso } from "@/lib/localTime";
 import { useToast } from "@/components/common/ToastProvider";
 
 // The ES compliance system, moved verbatim from the old composer:
@@ -83,7 +84,11 @@ export default function useCompliance({ state, accounts }) {
           body: JSON.stringify({
             body: state.body,
             accountIds: state.selectedIds,
-            scheduledFor: state.mode === "now" ? null : state.scheduledFor
+            // Naive picker value -> instant, same as every other sender. The
+            // stakes are lower here (this only drives the composer's live
+            // advice) but a check run against a time 5.5h off the one being
+            // scheduled is advice about the wrong post.
+            scheduledFor: state.mode === "now" ? null : localInputToIso(state.scheduledFor)
           })
         });
         const d = await r.json();

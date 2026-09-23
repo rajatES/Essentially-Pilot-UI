@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ImagePlus, Plus } from "lucide-react";
 import { apiJson } from "@/lib/apiClient";
+import { toLocalInput } from "@/lib/localTime";
 import { STATUS_STYLES, statusLabel, fmt, PLATFORM_META } from "@/lib/platformMeta";
 import { useToast } from "@/components/common/ToastProvider";
 import { usePostsData, usePostsInvalidate, useOptimisticPosts } from "@/lib/queries";
@@ -249,8 +250,7 @@ export default function CalendarView({ onOpenPost, onCompose }) {
                   onClick={day && !isPast && onCompose ? () => {
                     const at = new Date(cellDate);
                     at.setHours(isToday ? Math.min(td.getHours() + 1, 23) : 10, 0, 0, 0);
-                    const off = at.getTimezoneOffset();
-                    onCompose({ scheduledFor: new Date(at.getTime() - off * 60000).toISOString().slice(0, 16) });
+                    onCompose({ scheduledFor: toLocalInput(at) });
                   } : undefined}
                   className={`group min-h-[110px] border-b border-r border-slate-100 dark:border-gray-800 p-1.5 ${!day ? "bg-slate-50 dark:bg-gray-800/50" : ""} ${
                     dragOverKey === key ? "bg-indigo-50 dark:bg-indigo-500/10 ring-1 ring-inset ring-indigo-300 dark:ring-indigo-500/40" : ""
